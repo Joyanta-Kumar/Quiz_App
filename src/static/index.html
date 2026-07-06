@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Join Quiz Session</title>
+  <link rel="stylesheet" href="/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    
+    <!-- Join View -->
+    <main id="view-join" class="view active center-view">
+      <div class="glass-card">
+        <div class="logo center-text">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="primary-icon"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+          <h2>QuizMaster Student</h2>
+        </div>
+        <p class="subtitle center-text">Enter your details to join the session</p>
+        
+        <form id="join-form" class="mt-4">
+          <div class="form-group">
+            <label>Session Code</label>
+            <input type="text" id="join-code" required>
+          </div>
+          <div class="form-group">
+            <label>Roll Number</label>
+            <input type="text" id="join-roll" required placeholder="e.g., 101">
+          </div>
+          <div class="form-group">
+            <label>Full Name</label>
+            <input type="text" id="join-name" required placeholder="John Doe">
+          </div>
+          <div class="form-group">
+            <label>Semester</label>
+            <input type="text" id="join-semester" required placeholder="e.g., 2nd Semester">
+          </div>
+          <button type="submit" class="btn btn-primary w-100 mt-2" id="join-btn">Join Session</button>
+        </form>
+        <div id="join-error" class="error-msg"></div>
+      </div>
+    </main>
+
+    <!-- Lobby View -->
+    <main id="view-lobby" class="view center-view">
+      <div class="glass-card center-text">
+        <div class="loader"></div>
+        <h2>Waiting for Teacher...</h2>
+        <p class="subtitle mt-2">The quiz will start automatically when the teacher begins the session.</p>
+      </div>
+    </main>
+
+    <!-- Quiz View -->
+    <main id="view-quiz" class="view quiz-layout">
+      <header class="quiz-header glass-header">
+        <div>
+          <h2 id="quiz-title">Quiz Title</h2>
+          <p class="subtitle" id="student-info">Roll: 101 | John Doe</p>
+        </div>
+        <div class="timer-box">
+          <span class="timer-label">Time Remaining</span>
+          <span class="timer-value" id="timer">00:00</span>
+        </div>
+      </header>
+
+      <div class="quiz-content">
+        <div id="questions-container" class="questions-container">
+          <!-- Populated via JS -->
+        </div>
+        
+        <div class="quiz-actions mt-4">
+          <button class="btn btn-primary btn-large" id="submit-quiz-btn">Submit Answers</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- Result View -->
+    <main id="view-result" class="view center-view">
+      <div class="glass-card center-text">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="success-icon"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+        <h2 class="mt-4">Quiz Submitted!</h2>
+        <p class="subtitle mt-2">Your answers have been recorded.</p>
+        <div class="score-box mt-4">
+          <span class="score-label">Your Score</span>
+          <h1 id="final-score">-</h1>
+        </div>
+      </div>
+    </main>
+
+  </div>
+
+  <script src="/student.js"></script>
+</body>
+</html>

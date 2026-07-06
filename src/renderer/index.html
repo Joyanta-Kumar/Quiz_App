@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teacher Dashboard - LAN Quiz System</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="logo">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+        <span>QuizMaster</span>
+      </div>
+      <nav class="nav-menu">
+        <a href="#" class="nav-item active" data-view="dashboard">Dashboard</a>
+        <a href="#" class="nav-item" data-view="create">Create Quiz</a>
+        <a href="#" class="nav-item" data-view="live">Live Session</a>
+        <a href="#" class="nav-item" data-view="history">History</a>
+      </nav>
+      <div class="server-controls-section" style="padding: 0 16px 16px;">
+        <h3 style="margin: 0 0 8px; font-size: 0.875rem; color: var(--text-muted);">Server</h3>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span id="server-status" class="status-badge status-timeout">Server Off</span>
+          <button id="server-toggle-btn" class="btn btn-primary" style="flex: 1; padding: 8px 12px;" onclick="window.toggleServer()">Start Server</button>
+        </div>
+      </div>
+      <div class="server-info">
+        <div class="status-dot" id="server-status-dot"></div>
+        <div>
+          <p class="server-title" id="server-title">Server Off</p>
+          <p class="server-ip" id="server-ip">Waiting...</p>
+        </div>
+      </div>
+    </aside>
+
+    <main class="content">
+      <!-- Dashboard View -->
+      <section id="view-dashboard" class="view active">
+        <header>
+          <h1>Your Quizzes</h1>
+          <button class="btn btn-primary" onclick="switchView('create')">+ New Quiz</button>
+        </header>
+        <div class="quizzes-grid" id="quizzes-grid">
+          <!-- Quiz cards populated via JS -->
+        </div>
+      </section>
+
+      <!-- Create Quiz View -->
+      <section id="view-create" class="view">
+        <header>
+          <h1>Create New Quiz</h1>
+        </header>
+        <div class="glass-panel">
+          <div class="form-group">
+            <label>Quiz Title</label>
+            <input type="text" id="new-quiz-title" placeholder="e.g., Midterm Exam">
+          </div>
+          <div class="form-group">
+            <label>Duration (minutes)</label>
+            <input type="number" id="new-quiz-duration" value="5" min="1">
+          </div>
+          <div class="form-group">
+            <label>Semester</label>
+            <input type="text" id="new-quiz-semester" placeholder="e.g., 2nd Semester">
+          </div>
+          
+          <div class="questions-builder">
+            <h3>Questions</h3>
+            <div id="questions-container"></div>
+            <button class="btn btn-secondary" id="add-question-btn">+ Add Question</button>
+          </div>
+
+          <div class="form-actions mt-4">
+            <button class="btn btn-primary" id="save-quiz-btn">Save Quiz</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Live Session View -->
+      <section id="view-live" class="view">
+        <header>
+          <h1>Live Session</h1>
+          <div id="admin-timer" style="font-size: 1.5rem; font-weight: bold; color: var(--text-primary); margin-left: auto; margin-right: 1rem;">
+            --:--
+          </div>
+          <div class="session-controls" id="session-controls">
+            <!-- Populated via JS -->
+          </div>
+        </header>
+        <div class="live-layout">
+          <div class="glass-panel students-panel">
+            <h3>Connected Students (<span id="student-count">0</span>)</h3>
+            <ul id="students-list" class="students-list">
+              <!-- Students populated via JS -->
+            </ul>
+          </div>
+          <div class="glass-panel submissions-panel">
+            <h3>Live Submissions</h3>
+            <div class="table-container">
+              <table class="submissions-table">
+                <thead>
+                  <tr>
+                    <th>Roll</th>
+                    <th>Name</th>
+                    <th>Score</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="submissions-body">
+                  <!-- Submissions populated via JS -->
+                </tbody>
+              </table>
+            </div>
+            <div class="mt-4" style="text-align: right;">
+               <button class="btn btn-secondary" id="export-csv-btn" disabled>Export to CSV</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- History View -->
+      <section id="view-history" class="view">
+        <header>
+          <h1>Quiz History</h1>
+        </header>
+        <div class="glass-panel">
+          <div id="history-container">
+            <!-- History content here -->
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Start Session Modal -->
+  <div id="start-session-modal" class="modal">
+    <div class="modal-content glass-panel">
+      <h2>Start Session</h2>
+      <p id="modal-quiz-title"></p>
+      <div class="form-group mt-4">
+        <label>Session Code (Students use this to join)</label>
+        <input type="text" id="session-code-input" value="1234">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" id="confirm-start-btn">Start</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- View Results Modal -->
+  <div id="view-results-modal" class="modal">
+    <div class="modal-content glass-panel view-results-modal">
+      <h2 id="view-results-title"></h2>
+      <div class="table-container">
+        <table class="submissions-table">
+          <thead>
+            <tr>
+              <th>Roll</th>
+              <th>Name</th>
+              <th>Semester</th>
+              <th>Score</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="view-results-body">
+            <!-- Results populated via JS -->
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeViewResultsModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
