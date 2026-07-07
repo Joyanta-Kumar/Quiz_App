@@ -30,7 +30,7 @@ function createWindow() {
       contextIsolation: false // For simplicity in LAN app, we'll allow nodeIntegration in renderer
     },
     title: "LAN Quiz System - Teacher Dashboard",
-    icon: path.join(__dirname, '../../assets/icon.png') // Optional
+    icon: path.resolve(__dirname, '../assets/icon.ico') // Optional
   });
 
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
