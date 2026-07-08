@@ -1,61 +1,56 @@
 {
-  "name": "quiz-master",
-  "version": "1.0.0",
-  "description": "LAN Quiz System - Teacher Panel",
-  "main": "src/main/main.js",
-  "scripts": {
-    "start": "electron . --no-sandbox",
-    "build": "electron-builder",
-    "build:win": "electron-builder --win",
-    "build:linux": "electron-builder --linux"
-    
-  },
-  "keywords": [
-    "quiz",
-    "lan",
-    "education"
-  ],
-  "author": {
-    "name": "Najim",
-    "email": "najimchowdhury742@gmail.com"
-  },
-  "license": "ISC",
-  "type": "commonjs",
-  "build": {
-    "appId": "com.najim.quizmaster",
-    "productName": "Quiz Master",
-    "directories": {
-      "output": "dist"
+    "name": "quiz-master",
+    "version": "1.0.0",
+    "description": "LAN Quiz System - Teacher Panel",
+    "main": "src/main/main.js",
+    "scripts": {
+        "start": "electron . --no-sandbox",
+        "build": "electron-builder",
+        "build:win": "electron-builder --win",
+        "build:linux": "electron-builder --linux"
     },
-    "files": [
-      "src/**/*",
-      "package.json"
+    "keywords": [
+        "quiz",
+        "lan",
+        "education"
     ],
-    "win": {
-      "icon": "src/assets/icon.ico",
-      "target": [
-        "nsis",
-        "portable"
-      ]
+    "author": {
+        "name": "Najim",
+        "email": "najimchowdhury742@gmail.com"
     },
-    "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ],
-      "category": "Education",
-      "maintainer": "Najim <najimchowdhury742@gmail.com>"
+    "license": "ISC",
+    "type": "commonjs",
+    "build": {
+        "appId": "com.najim.quizmaster",
+        "productName": "Quiz Master",
+        "directories": {
+            "output": "dist"
+        },
+        "files": [
+            "src/**/*",
+            "package.json"
+        ],
+        "win": {
+            "icon": "assets/icon.ico",
+            "target": ["nsis", "portable"],
+            "artifactName": "${productName}-${version}-setup.${ext}"
+        },
+        "linux": {
+            "icon": "assets/icon.png",
+            "target": [ "deb", "AppImage" ],
+            "category": "Education",
+            "maintainer": "Najim <najimchowdhury742@gmail.com>"
+        }
+    },
+    "dependencies": {
+        "cors": "^2.8.6",
+        "csv-writer": "^1.6.0",
+        "express": "^5.2.1",
+        "sqlite3": "^6.0.1",
+        "ws": "^8.20.0"
+    },
+    "devDependencies": {
+        "electron": "^43.1.0",
+        "electron-builder": "^26.15.3"
     }
-  },
-  "dependencies": {
-    "cors": "^2.8.6",
-    "csv-writer": "^1.6.0",
-    "express": "^5.2.1",
-    "sqlite3": "^6.0.1",
-    "ws": "^8.20.0"
-  },
-  "devDependencies": {
-    "electron": "^41.10.0",
-    "electron-builder": "^26.15.3"
-  }
 }
