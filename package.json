@@ -5,6 +5,7 @@
     "main": "src/main/main.js",
     "scripts": {
         "start": "electron . --no-sandbox",
+        "start:dev": "nodemon",
         "build": "electron-builder",
         "build:win": "electron-builder --win",
         "build:linux": "electron-builder --linux"
@@ -32,12 +33,18 @@
         ],
         "win": {
             "icon": "assets/icon.ico",
-            "target": ["nsis", "portable"],
+            "target": [
+                "nsis",
+                "portable"
+            ],
             "artifactName": "${productName}-${version}-setup.${ext}"
         },
         "linux": {
             "icon": "assets/icon.png",
-            "target": [ "deb", "AppImage" ],
+            "target": [
+                "deb",
+                "AppImage"
+            ],
             "category": "Education",
             "maintainer": "Najim <najimchowdhury742@gmail.com>"
         }
@@ -51,6 +58,7 @@
     },
     "devDependencies": {
         "electron": "^43.1.0",
-        "electron-builder": "^26.15.3"
+        "electron-builder": "^26.15.3",
+        "nodemon": "^3.1.14"
     }
 }
