@@ -444,14 +444,15 @@ async function loadQuizzes() {
     const semester = quiz.semester ? sanitize(quiz.semester) : '';
     const session = quiz.session ? sanitize(quiz.session) : '';
     
+    let detailsHtml = `<p>Duration: ${durationMinutes}m</p>`;
+    if (semester) {
+      detailsHtml += `<p><small>Semester: ${semester}</small></p>`;
+    }
+    if (session) {
+      detailsHtml += `<p><small>Session: ${session}</small></p>`;
+    }
+    
     card.innerHTML = `
-      <h3>${title}</h3>
-      <p>Duration: ${durationMinutes}m</p>
-      ${semester ? `<p><small>Semester: ${semester}</small></p>` : ''}
-      ${session ? `<p><small>Session: ${session}</small></p>` : ''}
-      <div class="card-actions">
-        <button class="btn btn-primary" onclick="openStartSessionModal(${quiz.id}, '${title.replace(/'/g, "\\'")}')">Start Session</button>
-        <button class="btn btn-danger" onclick="deleteQuiz(${quiz.id})">Delete</button>
       <div style="display: flex; gap: 12px; align-items: flex-start; width: 100%;">
         ${isSelectModeDashboard ? `
           <input type="checkbox" ${isSelected ? 'checked' : ''} 
@@ -459,11 +460,11 @@ async function loadQuizzes() {
             style="width: 18px; height: 18px; cursor: pointer; margin-top: 4px;">
         ` : ''}
         <div style="flex: 1;">
-          <h3>${quiz.title}</h3>
+          <h3>${title}</h3>
           ${detailsHtml}
           ${!isSelectModeDashboard ? `
             <div class="card-actions">
-              <button class="btn btn-primary" onclick="openStartSessionModal(${quiz.id}, '${quiz.title.replace(/'/g, "\\'")}')">Start Session</button>
+              <button class="btn btn-primary" onclick="openStartSessionModal(${quiz.id}, '${title.replace(/'/g, "\\'")}')">Start Session</button>
             </div>
           ` : ''}
         </div>
