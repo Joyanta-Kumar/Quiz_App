@@ -170,9 +170,24 @@ const dbApi = {
 
   deleteQuiz: (id) => {
     return new Promise((resolve, reject) => {
-      db.run(`DELETE FROM quizzes WHERE id = ?`, [id], function(err) {
-        if (err) reject(err);
-        else resolve(this.changes);
+      db.serialize(() => {
+        // First delete all submissions for sessions of this quiz
+        db.run(`DELETE FROM submissions WHERE session_id IN (SELECT id FROM sessions WHERE quiz_id = ?)`, [id], (err) => {
+          if (err) reject(err);
+        });
+        // Then delete all sessions for this quiz
+        db.run(`DELETE FROM sessions WHERE quiz_id = ?`, [id], (err) => {
+          if (err) reject(err);
+        });
+        // Then delete all questions for this quiz
+        db.run(`DELETE FROM questions WHERE quiz_id = ?`, [id], (err) => {
+          if (err) reject(err);
+        });
+        // Finally delete the quiz itself
+        db.run(`DELETE FROM quizzes WHERE id = ?`, [id], function(err) {
+          if (err) reject(err);
+          else resolve(this.changes);
+        });
       });
     });
   },
@@ -276,6 +291,72 @@ const dbApi = {
       `, (err, rows) => {
         if (err) reject(err);
         else resolve(rows);
+      });
+    });
+  },
+
+  deleteSession: (sessionId) => {
+    return new Promise((resolve, reject) => {
+      db.serialize(() => {
+        // First delete all submissions for this session
+        db.run(`DELETE FROM submissions WHERE session_id = ?`, [sessionId], (err) => {
+          if (err) reject(err);
+        });
+        // Then delete the session itself
+        db.run(`DELETE FROM sessions WHERE id = ?`, [sessionId], function(err) {
+          if (err) reject(err);
+          else resolve(this.changes);
+        });
+      });
+    });
+  },
+
+  deleteSessions: (sessionIds) => {
+    return new Promise((resolve, reject) => {
+      if (sessionIds.length === 0) {
+        resolve(0);
+        return;
+      }
+      const placeholders = sessionIds.map(() => '?').join(',');
+      db.serialize(() => {
+        // First delete all submissions for these sessions
+        db.run(`DELETE FROM submissions WHERE session_id IN (${placeholders})`, sessionIds, (err) => {
+          if (err) reject(err);
+        });
+        // Then delete the sessions themselves
+        db.run(`DELETE FROM sessions WHERE id IN (${placeholders})`, sessionIds, function(err) {
+          if (err) reject(err);
+          else resolve(this.changes);
+        });
+      });
+    });
+  },
+
+  deleteQuizzes: (quizIds) => {
+    return new Promise((resolve, reject) => {
+      if (quizIds.length === 0) {
+        resolve(0);
+        return;
+      }
+      const placeholders = quizIds.map(() => '?').join(',');
+      db.serialize(() => {
+        // First delete all submissions for sessions of these quizzes
+        db.run(`DELETE FROM submissions WHERE session_id IN (SELECT id FROM sessions WHERE quiz_id IN (${placeholders}))`, quizIds, (err) => {
+          if (err) reject(err);
+        });
+        // Then delete all sessions for these quizzes
+        db.run(`DELETE FROM sessions WHERE quiz_id IN (${placeholders})`, quizIds, (err) => {
+          if (err) reject(err);
+        });
+        // Then delete all questions for these quizzes
+        db.run(`DELETE FROM questions WHERE quiz_id IN (${placeholders})`, quizIds, (err) => {
+          if (err) reject(err);
+        });
+        // Finally delete the quizzes themselves
+        db.run(`DELETE FROM quizzes WHERE id IN (${placeholders})`, quizIds, function(err) {
+          if (err) reject(err);
+          else resolve(this.changes);
+        });
       });
     });
   }

@@ -100,6 +100,18 @@ app.whenReady().then(async () => {
       return await dbApi.getSubmissionsBySession(sessionId);
     });
 
+    ipcMain.handle('db:deleteSession', async (_, sessionId) => {
+      return await dbApi.deleteSession(sessionId);
+    });
+
+    ipcMain.handle('db:deleteSessions', async (_, sessionIds) => {
+      return await dbApi.deleteSessions(sessionIds);
+    });
+
+    ipcMain.handle('db:deleteQuizzes', async (_, quizIds) => {
+      return await dbApi.deleteQuizzes(quizIds);
+    });
+
     // CSV export handler
     ipcMain.handle('export-csv', async (_, sessionId) => {
       try {

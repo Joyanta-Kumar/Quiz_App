@@ -74,14 +74,12 @@ body {
   font-weight: 500;
   transition: all 0.28s cubic-bezier(0.22, 1, 0.36, 1);
   border-left: 3px solid transparent;
-  filter: blur(1px);
 }
 
 .nav-item:hover, .nav-item.active {
   color: var(--text-main);
   background: rgba(114, 135, 253, 0.14);
   transform: translateX(10%);
-  filter: blur(0px);
 }
 
 .nav-item.active {

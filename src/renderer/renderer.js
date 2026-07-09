@@ -21,6 +21,10 @@ const serverToggleBtn = document.getElementById('server-toggle-btn');
 // State
 let quizzes = [];
 let questions = []; // For the builder
+let isSelectModeDashboard = false;
+let selectedQuizzes = new Set();
+let isSelectModeHistory = false;
+let selectedSessions = new Set();
 
 // Update server status UI
 function updateServerStatusUI(isRunning) {
@@ -182,22 +186,39 @@ async function loadHistory() {
     console.log('Session:', session.id, 'Formatted BDT:', date);
     const lowestScore = session.lowest_score !== null ? session.lowest_score : 'N/A';
     const highestScore = session.highest_score !== null ? session.highest_score : 'N/A';
+    const isSelected = selectedSessions.has(session.id);
     return `
       <div class="history-item" style="padding: 16px; border-bottom: 1px solid var(--panel-border); display: flex; justify-content: space-between; align-items: center;">
-        <div>
-          <h3 style="margin: 0;">${session.title}${session.semester ? ` (${session.semester})` : ''}</h3>
-          <p style="margin: 4px 0 0 0; color: var(--text-muted); font-size: 0.875rem;">
-            ${date} | ${session.submission_count} submissions | Low: ${lowestScore}, High: ${highestScore}
-          </p>
+        <div style="display: flex; gap: 12px; align-items: flex-start; flex: 1;">
+          ${isSelectModeHistory ? `
+            <input type="checkbox" ${isSelected ? 'checked' : ''} 
+              onclick="event.stopPropagation(); window.toggleSessionSelection(${session.id})"
+              style="width: 18px; height: 18px; cursor: pointer; margin-top: 4px;">
+          ` : ''}
+          <div>
+            <h3 style="margin: 0;">${session.title}${session.semester ? ` (${session.semester})` : ''}</h3>
+            <p style="margin: 4px 0 0 0; color: var(--text-muted); font-size: 0.875rem;">
+              ${date} | ${session.submission_count} submissions | Low: ${lowestScore}, High: ${highestScore}
+            </p>
+          </div>
         </div>
-        <div style="display: flex; gap: 8px;">
-          <button class="btn btn-secondary" onclick="window.viewSessionResults(${session.id}, '${session.title}')">View Results</button>
-          <button class="btn btn-secondary" onclick="window.exportSession(${session.id})">Export CSV</button>
-        </div>
+        ${!isSelectModeHistory ? `
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary" onclick="window.viewSessionResults(${session.id}, '${session.title}')">View Results</button>
+            <button class="btn btn-secondary" onclick="window.exportSession(${session.id})">Export CSV</button>
+          </div>
+        ` : ''}
       </div>
     `;
   }).join('');
 }
+
+window.deleteSession = async function(sessionId) {
+  if (confirm('Are you sure you want to delete this session and all its submissions?')) {
+    await ipcRenderer.invoke('db:deleteSession', sessionId);
+    loadHistory();
+  }
+};
 
 window.exportSession = async function(sessionId) {
   const success = await ipcRenderer.invoke('export-csv', sessionId);
@@ -243,6 +264,117 @@ window.closeViewResultsModal = function() {
   document.getElementById('view-results-modal').classList.remove('active');
 };
 
+// Dashboard Select Mode
+window.toggleDashboardSelectMode = function() {
+  isSelectModeDashboard = !isSelectModeDashboard;
+  if (!isSelectModeDashboard) {
+    selectedQuizzes.clear();
+  }
+  updateDashboardUI();
+};
+
+window.toggleQuizSelection = function(quizId) {
+  if (selectedQuizzes.has(quizId)) {
+    selectedQuizzes.delete(quizId);
+  } else {
+    selectedQuizzes.add(quizId);
+  }
+  updateDashboardDeleteBtn();
+};
+
+function updateDashboardDeleteBtn() {
+  const deleteBtn = document.getElementById('dashboard-delete-selected-btn');
+  if (deleteBtn) {
+    deleteBtn.style.display = selectedQuizzes.size > 0 ? 'flex' : 'none';
+    deleteBtn.alignItems = 'center';
+    deleteBtn.gap = '4px';
+  }
+}
+
+function updateDashboardUI() {
+  const selectBtn = document.getElementById('dashboard-select-btn');
+  const deleteBtn = document.getElementById('dashboard-delete-selected-btn');
+  const newQuizBtn = selectBtn?.parentElement?.querySelector('.btn-primary');
+
+  if (isSelectModeDashboard) {
+    selectBtn?.classList.add('btn-primary');
+    selectBtn?.classList.remove('btn-secondary');
+    if (newQuizBtn) newQuizBtn.style.display = 'none';
+  } else {
+    selectBtn?.classList.remove('btn-primary');
+    selectBtn?.classList.add('btn-secondary');
+    if (newQuizBtn) newQuizBtn.style.display = 'flex';
+    if (deleteBtn) deleteBtn.style.display = 'none';
+  }
+
+  loadQuizzes();
+}
+
+window.deleteSelectedQuizzes = async function() {
+  if (selectedQuizzes.size === 0) return;
+  if (confirm(`Are you sure you want to delete ${selectedQuizzes.size} quiz(zes) and all their data?`)) {
+    await ipcRenderer.invoke('db:deleteQuizzes', Array.from(selectedQuizzes));
+    isSelectModeDashboard = false;
+    selectedQuizzes.clear();
+    loadQuizzes();
+    updateDashboardUI();
+  }
+};
+
+// History Select Mode
+window.toggleHistorySelectMode = function() {
+  isSelectModeHistory = !isSelectModeHistory;
+  if (!isSelectModeHistory) {
+    selectedSessions.clear();
+  }
+  updateHistoryUI();
+};
+
+window.toggleSessionSelection = function(sessionId) {
+  if (selectedSessions.has(sessionId)) {
+    selectedSessions.delete(sessionId);
+  } else {
+    selectedSessions.add(sessionId);
+  }
+  updateHistoryDeleteBtn();
+};
+
+function updateHistoryDeleteBtn() {
+  const deleteBtn = document.getElementById('history-delete-selected-btn');
+  if (deleteBtn) {
+    deleteBtn.style.display = selectedSessions.size > 0 ? 'flex' : 'none';
+    deleteBtn.alignItems = 'center';
+    deleteBtn.gap = '4px';
+  }
+}
+
+function updateHistoryUI() {
+  const selectBtn = document.getElementById('history-select-btn');
+  const deleteBtn = document.getElementById('history-delete-selected-btn');
+
+  if (isSelectModeHistory) {
+    selectBtn?.classList.add('btn-primary');
+    selectBtn?.classList.remove('btn-secondary');
+  } else {
+    selectBtn?.classList.remove('btn-primary');
+    selectBtn?.classList.add('btn-secondary');
+    if (deleteBtn) deleteBtn.style.display = 'none';
+  }
+
+  loadHistory();
+}
+
+window.deleteSelectedSessions = async function() {
+  if (selectedSessions.size === 0) return;
+  if (confirm(`Are you sure you want to delete ${selectedSessions.size} session(s) and all their submissions?`)) {
+    await ipcRenderer.invoke('db:deleteSessions', Array.from(selectedSessions));
+    isSelectModeHistory = false;
+    selectedSessions.clear();
+    loadHistory();
+    updateHistoryUI();
+  }
+};
+
 // API Calls
 async function apiGet(endpoint) {
   const res = await fetch(`http://localhost:${serverPort}/api${endpoint}`);
@@ -278,6 +410,7 @@ async function loadQuizzes() {
   quizzes.forEach(quiz => {
     const card = document.createElement('div');
     card.className = 'quiz-card';
+    const isSelected = selectedQuizzes.has(quiz.id);
     const durationMinutes = Math.round(quiz.duration / 60);
     let detailsHtml = `<p>Duration: ${durationMinutes}m</p>`;
     if (quiz.semester) {
@@ -287,11 +420,21 @@ async function loadQuizzes() {
       detailsHtml += `<p><small>Session: ${quiz.session}</small></p>`;
     }
     card.innerHTML = `
-      <h3>${quiz.title}</h3>
-      ${detailsHtml}
-      <div class="card-actions">
-        <button class="btn btn-primary" onclick="openStartSessionModal(${quiz.id}, '${quiz.title.replace(/'/g, "\\'")}')">Start Session</button>
-        <button class="btn btn-danger" onclick="deleteQuiz(${quiz.id})">Delete</button>
+      <div style="display: flex; gap: 12px; align-items: flex-start; width: 100%;">
+        ${isSelectModeDashboard ? `
+          <input type="checkbox" ${isSelected ? 'checked' : ''} 
+            onclick="event.stopPropagation(); window.toggleQuizSelection(${quiz.id})"
+            style="width: 18px; height: 18px; cursor: pointer; margin-top: 4px;">
+        ` : ''}
+        <div style="flex: 1;">
+          <h3>${quiz.title}</h3>
+          ${detailsHtml}
+          ${!isSelectModeDashboard ? `
+            <div class="card-actions">
+              <button class="btn btn-primary" onclick="openStartSessionModal(${quiz.id}, '${quiz.title.replace(/'/g, "\\'")}')">Start Session</button>
+            </div>
+          ` : ''}
+        </div>
       </div>
     `;
     quizzesGrid.appendChild(card);
