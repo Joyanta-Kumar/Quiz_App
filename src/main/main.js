@@ -85,11 +85,11 @@ app.whenReady().then(async () => {
     });
     
     ipcMain.handle('db:deleteQuiz', async (_, id) => {
-      return await dbApi.deleteQuiz(id);
+      return await dbApi.softDeleteQuiz(id);
     });
 
-    ipcMain.handle('db:addQuestion', async (_, quizId, text, opt_a, opt_b, opt_c, opt_d, correct_opt) => {
-      return await dbApi.addQuestion(quizId, text, opt_a, opt_b, opt_c, opt_d, correct_opt);
+    ipcMain.handle('db:addQuestion', async (_, quizId, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image) => {
+      return await dbApi.addQuestion(quizId, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image);
     });
     
     ipcMain.handle('db:getSessionsHistory', async () => {
@@ -109,7 +109,63 @@ app.whenReady().then(async () => {
     });
 
     ipcMain.handle('db:deleteQuizzes', async (_, quizIds) => {
-      return await dbApi.deleteQuizzes(quizIds);
+      return await dbApi.softDeleteQuizzes(quizIds);
+    });
+
+    ipcMain.handle('db:getAllStudents', async () => {
+      return await dbApi.getAllStudents();
+    });
+
+    ipcMain.handle('db:deleteStudent', async (_, id) => {
+      return await dbApi.softDeleteStudent(id);
+    });
+    
+    ipcMain.handle('db:getDeletedItems', async () => {
+      return await dbApi.getDeletedItems();
+    });
+    
+    ipcMain.handle('db:restoreQuiz', async (_, id) => {
+      return await dbApi.restoreQuiz(id);
+    });
+    
+    ipcMain.handle('db:restoreQuizzes', async (_, quizIds) => {
+      return await dbApi.restoreQuizzes(quizIds);
+    });
+    
+    ipcMain.handle('db:restoreStudent', async (_, id) => {
+      return await dbApi.restoreStudent(id);
+    });
+    
+    ipcMain.handle('db:permanentDeleteQuiz', async (_, id) => {
+      return await dbApi.permanentDeleteQuiz(id);
+    });
+    
+    ipcMain.handle('db:permanentDeleteQuizzes', async (_, quizIds) => {
+      return await dbApi.permanentDeleteQuizzes(quizIds);
+    });
+    
+    ipcMain.handle('db:permanentDeleteStudent', async (_, id) => {
+      return await dbApi.permanentDeleteStudent(id);
+    });
+
+    ipcMain.handle('db:verifyStudent', async (_, id) => {
+      return await dbApi.verifyStudent(id);
+    });
+
+    ipcMain.handle('db:getQuestionsByQuiz', async (_, quizId) => {
+      return await dbApi.getQuestionsByQuiz(quizId);
+    });
+
+    ipcMain.handle('db:getSessionById', async (_, sessionId) => {
+      return await dbApi.getSessionById(sessionId);
+    });
+
+    ipcMain.handle('db:toggleShowAnswers', async (_, sessionId) => {
+      return await dbApi.toggleShowAnswers(sessionId);
+    });
+
+    ipcMain.handle('db:getSessionQuestionsAndAnswers', async (_, sessionId) => {
+      return await dbApi.getSessionQuestionsAndAnswers(sessionId);
     });
 
     // CSV export handler

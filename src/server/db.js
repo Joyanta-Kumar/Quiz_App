@@ -29,6 +29,79 @@ async function initDb() {
   return new Promise((resolve, reject) => {
     db.serialize(async () => {
       try {
+        // First, check if students table exists and if it has old columns
+        const tableExists = await new Promise((res, rej) => {
+          db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='students'", (err, row) => {
+            if (err) rej(err);
+            else res(!!row);
+          });
+        });
+
+        if (tableExists) {
+          // Existing table: check for all required columns, add missing ones
+          const studentColumns = ['registration_number', 'roll_number', 'full_name', 'semester', 'session_year', 'department', 'batch', 'verified', 'deleted'];
+          
+          // Check if there's an old "name" column
+          const hasNameColumn = await columnExists('students', 'name');
+          
+          for (const column of studentColumns) {
+            const exists = await columnExists('students', column);
+            if (!exists) {
+              if (column === 'full_name' && hasNameColumn) {
+                // If we have an old "name" column, copy its values to full_name first
+                await new Promise((res, rej) => {
+                  db.run(`ALTER TABLE students ADD COLUMN ${column} TEXT`, (err) => {
+                    if (err) rej(err);
+                    else res();
+                  });
+                });
+                // Copy name to full_name
+                await new Promise((res, rej) => {
+                  db.run(`UPDATE students SET full_name = name WHERE full_name IS NULL`, (err) => {
+                    if (err) rej(err);
+                    else res();
+                  });
+                });
+              } else if (column === 'verified' || column === 'deleted') {
+                // Add verified/deleted column with default 0
+                await new Promise((res, rej) => {
+                  db.run(`ALTER TABLE students ADD COLUMN ${column} INTEGER DEFAULT 0`, (err) => {
+                    if (err) rej(err);
+                    else res();
+                  });
+                });
+              } else {
+                // Add column without NOT NULL constraint for existing rows
+                await new Promise((res, rej) => {
+                  db.run(`ALTER TABLE students ADD COLUMN ${column} TEXT`, (err) => {
+                    if (err) rej(err);
+                    else res();
+                  });
+                });
+              }
+            }
+          }
+        } else {
+          // New table: create with all NOT NULL constraints
+          await new Promise((res, rej) => {
+            db.run(`CREATE TABLE students (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              registration_number TEXT NOT NULL UNIQUE,
+              roll_number TEXT NOT NULL,
+              full_name TEXT NOT NULL,
+              semester TEXT NOT NULL,
+              session_year TEXT NOT NULL,
+              department TEXT NOT NULL,
+              batch TEXT NOT NULL,
+              verified INTEGER NOT NULL DEFAULT 0,
+              deleted INTEGER NOT NULL DEFAULT 0
+            )`, (err) => {
+              if (err) rej(err);
+              else res();
+            });
+          });
+        }
+
         // Quizzes table
         await new Promise((res, rej) => {
           db.run(`CREATE TABLE IF NOT EXISTS quizzes (
@@ -36,7 +109,8 @@ async function initDb() {
             title TEXT NOT NULL,
             duration INTEGER DEFAULT 60,
             semester TEXT,
-            session TEXT
+            session TEXT,
+            deleted INTEGER DEFAULT 0
           )`, (err) => {
             if (err) rej(err);
             else res();
@@ -64,6 +138,17 @@ async function initDb() {
             });
           });
         }
+        
+        // Add deleted column to quizzes if not exists
+        const quizDeletedExists = await columnExists('quizzes', 'deleted');
+        if (!quizDeletedExists) {
+          await new Promise((res, rej) => {
+            db.run(`ALTER TABLE quizzes ADD COLUMN deleted INTEGER DEFAULT 0`, (err) => {
+              if (err) rej(err);
+              else res();
+            });
+          });
+        }
 
         // Questions table
         await new Promise((res, rej) => {
@@ -76,12 +161,24 @@ async function initDb() {
             opt_c TEXT NOT NULL,
             opt_d TEXT NOT NULL,
             correct_opt TEXT NOT NULL,
+            image TEXT,
             FOREIGN KEY(quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE
           )`, (err) => {
             if (err) rej(err);
             else res();
           });
         });
+
+        // Add image column to questions if not exists
+        const questionImageExists = await columnExists('questions', 'image');
+        if (!questionImageExists) {
+          await new Promise((res, rej) => {
+            db.run(`ALTER TABLE questions ADD COLUMN image TEXT`, (err) => {
+              if (err) rej(err);
+              else res();
+            });
+          });
+        }
 
         // Sessions table
         await new Promise((res, rej) => {
@@ -91,6 +188,7 @@ async function initDb() {
             quiz_id INTEGER,
             status TEXT DEFAULT 'active',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            show_answers INTEGER DEFAULT 0,
             FOREIGN KEY(quiz_id) REFERENCES quizzes(id)
           )`, (err) => {
             if (err) rej(err);
@@ -98,11 +196,23 @@ async function initDb() {
           });
         });
 
+        // Add show_answers column to sessions if not exists
+        const showAnswersExists = await columnExists('sessions', 'show_answers');
+        if (!showAnswersExists) {
+          await new Promise((res, rej) => {
+            db.run(`ALTER TABLE sessions ADD COLUMN show_answers INTEGER DEFAULT 0`, (err) => {
+              if (err) rej(err);
+              else res();
+            });
+          });
+        }
+
         // Submissions table
         await new Promise((res, rej) => {
           db.run(`CREATE TABLE IF NOT EXISTS submissions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             session_id INTEGER,
+            registration_number TEXT,
             roll TEXT NOT NULL,
             name TEXT NOT NULL,
             semester TEXT,
@@ -115,6 +225,17 @@ async function initDb() {
             else res();
           });
         });
+
+        // Add registration_number column to submissions if not exists
+        const subRegNumExists = await columnExists('submissions', 'registration_number');
+        if (!subRegNumExists) {
+          await new Promise((res, rej) => {
+            db.run(`ALTER TABLE submissions ADD COLUMN registration_number TEXT`, (err) => {
+              if (err) rej(err);
+              else res();
+            });
+          });
+        }
 
         // Add semester column to submissions if not exists
         const subSemesterExists = await columnExists('submissions', 'semester');
@@ -150,9 +271,98 @@ async function initDb() {
 
 // CRUD operations
 const dbApi = {
+  // Students
+  createStudent: async (registrationNumber, rollNumber, fullName, semester, sessionYear, department, batch) => {
+    return new Promise(async (resolve, reject) => {
+      const hasNameColumn = await columnExists('students', 'name');
+      
+      let query, params;
+      if (hasNameColumn) {
+        // If old name column exists, include it in insert to avoid NOT NULL errors
+        query = `INSERT INTO students (registration_number, roll_number, full_name, name, semester, session_year, department, batch, verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`;
+        params = [registrationNumber, rollNumber, fullName, fullName, semester, sessionYear, department, batch];
+      } else {
+        query = `INSERT INTO students (registration_number, roll_number, full_name, semester, session_year, department, batch, verified) VALUES (?, ?, ?, ?, ?, ?, ?, 0)`;
+        params = [registrationNumber, rollNumber, fullName, semester, sessionYear, department, batch];
+      }
+      
+      db.run(query, params, function(err) {
+        if (err) reject(err);
+        else resolve(this.lastID);
+      });
+    });
+  },
+  verifyStudent: (id) => {
+    return new Promise((resolve, reject) => {
+      db.run(`UPDATE students SET verified = 1 WHERE id = ?`, [id], function(err) {
+        if (err) reject(err);
+        else resolve(this.changes);
+      });
+    });
+  },
+
+  getStudentByRegistrationAndSession: async (registrationNumber, sessionYear) => {
+    return new Promise(async (resolve, reject) => {
+      // First, check if "name" column exists
+      const hasNameColumn = await columnExists('students', 'name');
+      
+      // Build the query
+      const query = hasNameColumn 
+        ? `SELECT id, registration_number, roll_number, COALESCE(full_name, name) as full_name, semester, session_year, department, batch, verified FROM students WHERE registration_number = ? AND session_year = ?`
+        : `SELECT * FROM students WHERE registration_number = ? AND session_year = ?`;
+      
+      db.get(query, [registrationNumber, sessionYear], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+  },
+
+  getAllStudents: async () => {
+    return new Promise(async (resolve, reject) => {
+      const hasNameColumn = await columnExists('students', 'name');
+      
+      const query = hasNameColumn 
+        ? `SELECT id, registration_number, roll_number, COALESCE(full_name, name) as full_name, semester, session_year, department, batch, verified FROM students WHERE deleted = 0 ORDER BY full_name`
+        : `SELECT * FROM students WHERE deleted = 0 ORDER BY full_name`;
+      
+      db.all(query, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    });
+  },
+
+  softDeleteStudent: (id) => {
+    return new Promise((resolve, reject) => {
+      db.run(`UPDATE students SET deleted = 1 WHERE id = ?`, [id], function(err) {
+        if (err) reject(err);
+        else resolve(this.changes);
+      });
+    });
+  },
+  
+  restoreStudent: (id) => {
+    return new Promise((resolve, reject) => {
+      db.run(`UPDATE students SET deleted = 0 WHERE id = ?`, [id], function(err) {
+        if (err) reject(err);
+        else resolve(this.changes);
+      });
+    });
+  },
+
+  permanentDeleteStudent: (id) => {
+    return new Promise((resolve, reject) => {
+      db.run(`DELETE FROM students WHERE id = ?`, [id], function(err) {
+        if (err) reject(err);
+        else resolve(this.changes);
+      });
+    });
+  },
+
   getQuizzes: () => {
     return new Promise((resolve, reject) => {
-      db.all(`SELECT * FROM quizzes`, (err, rows) => {
+      db.all(`SELECT * FROM quizzes WHERE deleted = 0`, (err, rows) => {
         if (err) reject(err);
         else resolve(rows);
       });
@@ -168,7 +378,25 @@ const dbApi = {
     });
   },
 
-  deleteQuiz: (id) => {
+  softDeleteQuiz: (id) => {
+    return new Promise((resolve, reject) => {
+      db.run(`UPDATE quizzes SET deleted = 1 WHERE id = ?`, [id], function(err) {
+        if (err) reject(err);
+        else resolve(this.changes);
+      });
+    });
+  },
+  
+  restoreQuiz: (id) => {
+    return new Promise((resolve, reject) => {
+      db.run(`UPDATE quizzes SET deleted = 0 WHERE id = ?`, [id], function(err) {
+        if (err) reject(err);
+        else resolve(this.changes);
+      });
+    });
+  },
+
+  permanentDeleteQuiz: (id) => {
     return new Promise((resolve, reject) => {
       db.serialize(() => {
         // First delete all submissions for sessions of this quiz
@@ -192,6 +420,33 @@ const dbApi = {
     });
   },
 
+  getDeletedItems: async () => {
+    return new Promise(async (resolve, reject) => {
+      const hasNameColumn = await columnExists('students', 'name');
+      const studentsQuery = hasNameColumn 
+        ? `SELECT id, registration_number, roll_number, COALESCE(full_name, name) as full_name, semester, session_year, department, batch, verified, 'student' as type FROM students WHERE deleted = 1`
+        : `SELECT id, registration_number, roll_number, full_name, semester, session_year, department, batch, verified, 'student' as type FROM students WHERE deleted = 1`;
+      
+      const quizzesQuery = `SELECT id, title, duration, semester, session, 'quiz' as type FROM quizzes WHERE deleted = 1`;
+      
+      const students = await new Promise((res, rej) => {
+        db.all(studentsQuery, (err, rows) => {
+          if (err) rej(err);
+          else res(rows);
+        });
+      });
+      
+      const quizzes = await new Promise((res, rej) => {
+        db.all(quizzesQuery, (err, rows) => {
+          if (err) rej(err);
+          else res(rows);
+        });
+      });
+      
+      resolve([...students, ...quizzes]);
+    });
+  },
+
   getQuestionsByQuiz: (quizId) => {
     return new Promise((resolve, reject) => {
       db.all(`SELECT * FROM questions WHERE quiz_id = ?`, [quizId], (err, rows) => {
@@ -201,11 +456,11 @@ const dbApi = {
     });
   },
 
-  addQuestion: (quizId, text, opt_a, opt_b, opt_c, opt_d, correct_opt) => {
+  addQuestion: (quizId, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image) => {
     return new Promise((resolve, reject) => {
-      db.run(`INSERT INTO questions (quiz_id, text, opt_a, opt_b, opt_c, opt_d, correct_opt) 
-              VALUES (?, ?, ?, ?, ?, ?, ?)`, 
-              [quizId, text, opt_a, opt_b, opt_c, opt_d, correct_opt], function(err) {
+      db.run(`INSERT INTO questions (quiz_id, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image) 
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, 
+              [quizId, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image], function(err) {
         if (err) reject(err);
         else resolve(this.lastID);
       });
@@ -332,7 +587,35 @@ const dbApi = {
     });
   },
 
-  deleteQuizzes: (quizIds) => {
+  softDeleteQuizzes: (quizIds) => {
+    return new Promise((resolve, reject) => {
+      if (quizIds.length === 0) {
+        resolve(0);
+        return;
+      }
+      const placeholders = quizIds.map(() => '?').join(',');
+      db.run(`UPDATE quizzes SET deleted = 1 WHERE id IN (${placeholders})`, quizIds, function(err) {
+        if (err) reject(err);
+        else resolve(this.changes);
+      });
+    });
+  },
+
+  restoreQuizzes: (quizIds) => {
+    return new Promise((resolve, reject) => {
+      if (quizIds.length === 0) {
+        resolve(0);
+        return;
+      }
+      const placeholders = quizIds.map(() => '?').join(',');
+      db.run(`UPDATE quizzes SET deleted = 0 WHERE id IN (${placeholders})`, quizIds, function(err) {
+        if (err) reject(err);
+        else resolve(this.changes);
+      });
+    });
+  },
+
+  permanentDeleteQuizzes: (quizIds) => {
     return new Promise((resolve, reject) => {
       if (quizIds.length === 0) {
         resolve(0);
@@ -357,6 +640,39 @@ const dbApi = {
           if (err) reject(err);
           else resolve(this.changes);
         });
+      });
+    });
+  },
+
+  getSessionById: (sessionId) => {
+    return new Promise((resolve, reject) => {
+      db.get(`SELECT * FROM sessions WHERE id = ?`, [sessionId], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+  },
+
+  toggleShowAnswers: (sessionId) => {
+    return new Promise((resolve, reject) => {
+      db.run(`UPDATE sessions SET show_answers = NOT show_answers WHERE id = ?`, [sessionId], function(err) {
+        if (err) reject(err);
+        else resolve(this.changes);
+      });
+    });
+  },
+
+  getSessionQuestionsAndAnswers: (sessionId) => {
+    return new Promise((resolve, reject) => {
+      db.all(`
+        SELECT q.*, s.show_answers 
+        FROM questions q
+        JOIN quizzes qu ON q.quiz_id = qu.id
+        JOIN sessions s ON s.quiz_id = qu.id
+        WHERE s.id = ?
+      `, [sessionId], (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
       });
     });
   }

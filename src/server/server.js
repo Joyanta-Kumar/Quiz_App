@@ -15,6 +15,7 @@ let quizStartTime = null; // Track when quiz started
 let quizDuration = 0; // Quiz duration in seconds
 let timerBroadcastInterval = null; // Interval to broadcast timer to admin
 let currentSessionId = null; // Track active session ID
+let activeSession = null; // Track the single active session
 
 async function startServer(port = 3000) {
   await initDb();
@@ -31,6 +32,45 @@ async function startServer(port = 3000) {
   // Serve join route specifically to index.html for client-side parsing
   app.get('/join/:code', (req, res) => {
     res.sendFile(path.join(staticPath, 'index.html'));
+  });
+
+  // Student Auth APIs
+  app.post('/api/students/signup', async (req, res) => {
+    try {
+      const { registrationNumber, rollNumber, fullName, semester, sessionYear, department, batch } = req.body;
+      
+      if (!registrationNumber || !rollNumber || !fullName || !semester || !sessionYear || !department || !batch) {
+        return res.status(400).json({ error: 'All fields are required' });
+      }
+
+      const id = await dbApi.createStudent(registrationNumber, rollNumber, fullName, semester, sessionYear, department, batch);
+      res.json({ id, registrationNumber, rollNumber, fullName, semester, sessionYear, department, batch });
+    } catch (err) {
+      if (err.message.includes('UNIQUE constraint failed')) {
+        res.status(400).json({ error: 'Student with this registration number already exists' });
+      } else {
+        res.status(500).json({ error: err.message });
+      }
+    }
+  });
+
+  app.post('/api/students/login', async (req, res) => {
+    try {
+      const { registrationNumber, sessionYear } = req.body;
+      
+      if (!registrationNumber || !sessionYear) {
+        return res.status(400).json({ error: 'Registration number and session year are required' });
+      }
+
+      const student = await dbApi.getStudentByRegistrationAndSession(registrationNumber, sessionYear);
+      if (!student) {
+        return res.status(404).json({ error: 'Student not found' });
+      }
+
+      res.json(student);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // REST API for Teacher GUI to manage DB
@@ -91,28 +131,28 @@ async function startServer(port = 3000) {
     }
   });
 
-  // Student API to fetch quiz data after joining
-  app.get('/api/sessions/:code', async (req, res) => {
+  // New API: Get current active session
+  app.get('/api/active-session', async (req, res) => {
     try {
-      const session = await dbApi.getSessionByCode(req.params.code);
-      if (!session) return res.status(404).json({ error: 'Session not found or inactive' });
+      if (!activeSession) {
+        return res.status(404).json({ error: 'No active session' });
+      }
       
-      const questions = await dbApi.getQuestionsByQuiz(session.quiz_id);
-      // Strip correct answers before sending to students
+      const questions = await dbApi.getQuestionsByQuiz(activeSession.quiz_id);
       const safeQuestions = questions.map(q => ({
         id: q.id,
         text: q.text,
         opt_a: q.opt_a,
         opt_b: q.opt_b,
         opt_c: q.opt_c,
-        opt_d: q.opt_d
+        opt_d: q.opt_d,
+        image: q.image
       }));
-
+      
       res.json({
-        id: session.id,
-        code: session.code,
-        duration: session.duration,
-        title: session.title,
+        id: activeSession.id,
+        duration: activeSession.duration,
+        title: activeSession.title,
         questions: safeQuestions
       });
     } catch (err) {
@@ -176,6 +216,23 @@ async function startServer(port = 3000) {
     }
   });
 
+  // Get session questions and answers (if enabled)
+  app.get('/api/sessions/:id/questions', async (req, res) => {
+    try {
+      const session = await dbApi.getSessionById(req.params.id);
+      if (!session) {
+        return res.status(404).json({ error: 'Session not found' });
+      }
+      if (!session.show_answers) {
+        return res.status(403).json({ error: 'Answers not available yet' });
+      }
+      const questions = await dbApi.getSessionQuestionsAndAnswers(req.params.id);
+      res.json(questions);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // CSV Export API
   app.get('/api/sessions/:id/export', async (req, res) => {
     try {
@@ -215,6 +272,7 @@ async function startServer(port = 3000) {
             quizStartTime = null;
             quizDuration = 0;
             currentSessionId = null;
+            activeSession = null;
             if (timerBroadcastInterval) {
               clearInterval(timerBroadcastInterval);
               timerBroadcastInterval = null;
@@ -223,18 +281,11 @@ async function startServer(port = 3000) {
             break;
             
           case 'session:start':
-            // data.payload = { code, quizId }
+            // data.payload = { quizId } (no code anymore!)
             // Validate input
-            if (!data.payload || !data.payload.code || !data.payload.quizId) {
+            if (!data.payload || !data.payload.quizId) {
               console.error('Invalid session:start payload');
               ws.send(JSON.stringify({ type: 'error', message: 'Invalid session data' }));
-              break;
-            }
-            
-            // Validate code format (minimum 4 characters, alphanumeric)
-            const code = String(data.payload.code).trim();
-            if (code.length < 4 || code.length > 10) {
-              ws.send(JSON.stringify({ type: 'error', message: 'Session code must be 4-10 characters' }));
               break;
             }
             
@@ -260,8 +311,16 @@ async function startServer(port = 3000) {
                 timerBroadcastInterval = null;
               }
               
-              const sessionId = await dbApi.createSession(code, data.payload.quizId);
+              // Generate a dummy code (since DB still requires it)
+              const dummyCode = Math.random().toString(36).substring(7);
+              const sessionId = await dbApi.createSession(dummyCode, data.payload.quizId);
               currentSessionId = sessionId;
+              activeSession = {
+                id: sessionId,
+                quiz_id: data.payload.quizId,
+                title: selectedQuiz.title,
+                duration: selectedQuiz.duration
+              };
               
               ws.send(JSON.stringify({ type: 'session:started', payload: { sessionId, duration: quizDuration } }));
               console.log(`Session ${sessionId} started for quiz ${data.payload.quizId}`);
@@ -297,7 +356,6 @@ async function startServer(port = 3000) {
                 c.send(JSON.stringify({ 
                   type: 'session:start', 
                   payload: { 
-                    code: data.payload.code,
                     startTime: quizStartTime,
                     duration: quizDuration
                   }
@@ -323,6 +381,7 @@ async function startServer(port = 3000) {
                     quizStartTime = null;
                     quizDuration = 0;
                     currentSessionId = null;
+                    activeSession = null;
                     wss.clients.forEach(c => {
                       if (c !== teacherWs && c.readyState === WebSocket.OPEN) {
                         c.send(JSON.stringify({ type: 'session:stop' }));
@@ -348,6 +407,7 @@ async function startServer(port = 3000) {
             quizStartTime = null;
             quizDuration = 0;
             currentSessionId = null;
+            activeSession = null;
             if (timerBroadcastInterval) {
               clearInterval(timerBroadcastInterval);
               timerBroadcastInterval = null;
@@ -363,11 +423,39 @@ async function startServer(port = 3000) {
             }
             break;
 
+          case 'session:toggle_show_answers':
+            // Broadcast to all connected students
+            wss.clients.forEach(client => {
+              if (client !== teacherWs && client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify({ 
+                  type: 'server:show_answers_updated', 
+                  payload: { showAnswers: data.payload.showAnswers } 
+                }));
+              }
+            });
+            break;
+
           case 'client:join':
             // payload: { registrationNumber, roll, name, semester }
             // Validate input
-            if (!data.payload || !data.payload.roll || !data.payload.name) {
+            if (!data.payload || !data.payload.registrationNumber || !data.payload.roll || !data.payload.name) {
               ws.send(JSON.stringify({ type: 'server:join_rejected', message: 'Invalid student information.' }));
+              break;
+            }
+            
+            // Check if student is verified
+            try {
+              // Get student from DB using registration number
+              const students = await dbApi.getAllStudents();
+              const student = students.find(s => s.registration_number === data.payload.registrationNumber);
+              
+              if (!student || !student.verified) {
+                ws.send(JSON.stringify({ type: 'server:join_rejected', message: 'Your account is not verified. Please contact your teacher.' }));
+                break;
+              }
+            } catch (err) {
+              console.error('Error checking student verification:', err);
+              ws.send(JSON.stringify({ type: 'server:join_rejected', message: 'Error verifying your account.' }));
               break;
             }
             

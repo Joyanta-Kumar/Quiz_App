@@ -14,7 +14,9 @@
   --text-main: #4c4f69;
   --text-muted: #6c6f85;
   --danger: #d20f39;
+  --danger-bg: rgba(210, 15, 57, 0.1);
   --success: #40a02b;
+  --success-bg: rgba(64, 160, 43, 0.1);
 }
 
 * {
@@ -210,6 +212,18 @@ input[type="text"]:read-only {
 
 .btn-primary:active {
   transform: translateY(0);
+}
+
+.btn-secondary {
+  background: var(--secondary);
+  color: var(--text-main);
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.btn-secondary:hover {
+  background: #dce0e8;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(108, 111, 133, 0.16);
 }
 
 .error-msg {

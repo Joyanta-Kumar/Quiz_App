@@ -11,26 +11,61 @@ let quizStartTime = 0;
 let quizDuration = 0;
 let answers = {}; // { qId: option }
 let hasSubmitted = false;
+let currentStudent = null;
+let serverAddress = null;
 
 // DOM Elements
 const views = document.querySelectorAll('.view');
-const joinForm = document.getElementById('join-form');
-const joinCodeInput = document.getElementById('join-code');
+const loginForm = document.getElementById('login-form');
+const signupForm = document.getElementById('signup-form');
+const joinBtn = document.getElementById('join-btn');
+const loginError = document.getElementById('login-error');
+const signupError = document.getElementById('signup-error');
 const joinError = document.getElementById('join-error');
 const quizTitleEl = document.getElementById('quiz-title');
 const studentInfoEl = document.getElementById('student-info');
+const studentGreetingEl = document.getElementById('student-greeting');
+const studentInfoDisplayEl = document.getElementById('student-info-display');
 const timerEl = document.getElementById('timer');
 const timerBox = document.querySelector('.timer-box');
 const questionsContainer = document.getElementById('questions-container');
 const submitQuizBtn = document.getElementById('submit-quiz-btn');
 const finalScoreEl = document.getElementById('final-score');
+const goToSignupBtn = document.getElementById('go-to-signup-btn');
+const goToLoginBtn = document.getElementById('go-to-login-btn');
+const logoutBtn = document.getElementById('logout-btn');
+
+// Helper function to get API base URL
+function getApiBaseUrl() {
+  if (serverAddress) {
+    return `http://${serverAddress}`;
+  }
+  return ''; // Use current host
+}
+
+// Helper function to get WebSocket URL
+function getWsUrl() {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  if (serverAddress) {
+    return `${protocol}//${serverAddress}`;
+  }
+  return `${protocol}//${window.location.host}`;
+}
 
 // Init
 function init() {
-  // Extract code from URL if present (e.g. /join/1234)
-  const pathParts = window.location.pathname.split('/');
-  if (pathParts.length >= 3 && pathParts[1] === 'join') {
-    joinCodeInput.value = pathParts[2];
+  // Check if server address is stored in localStorage (for backward compatibility)
+  const storedServerAddress = localStorage.getItem('quizmaster-server-address');
+  if (storedServerAddress) {
+    serverAddress = storedServerAddress;
+  }
+  
+  // Check if student is logged in from localStorage
+  const storedStudent = localStorage.getItem('quizmaster-student');
+  if (storedStudent) {
+    currentStudent = JSON.parse(storedStudent);
+    populateStudentInfo();
+    switchView('join');
   }
 }
 
@@ -39,20 +74,106 @@ function switchView(viewId) {
   document.getElementById(`view-${viewId}`).classList.add('active');
 }
 
-// Join Flow
-joinForm.addEventListener('submit', async (e) => {
+function populateStudentInfo() {
+  studentGreetingEl.textContent = `Welcome back, ${currentStudent.full_name}!`;
+  const infoParts = [`Roll: ${currentStudent.roll_number}`, `Semester: ${currentStudent.semester}`];
+  if (currentStudent.department) infoParts.push(`Dept: ${currentStudent.department}`);
+  if (currentStudent.batch) infoParts.push(`Batch: ${currentStudent.batch}`);
+  studentInfoDisplayEl.textContent = infoParts.join(' | ');
+}
+
+// View Switching
+goToSignupBtn.addEventListener('click', () => {
+  switchView('signup');
+  signupError.textContent = '';
+});
+
+goToLoginBtn.addEventListener('click', () => {
+  switchView('login');
+  loginError.textContent = '';
+});
+
+logoutBtn.addEventListener('click', () => {
+  currentStudent = null;
+  localStorage.removeItem('quizmaster-student');
+  switchView('login');
+  loginError.textContent = '';
+});
+
+// Sign Up Flow
+signupForm.addEventListener('submit', async (e) => {
   e.preventDefault();
-  const code = joinCodeInput.value.trim();
-  registrationNumber = document.getElementById('join-registration-number').value.trim();
-  roll = document.getElementById('join-roll').value.trim();
-  name = document.getElementById('join-name').value.trim();
-  semester = document.getElementById('join-semester').value.trim();
   
-  if (!code || !registrationNumber || !roll || !name || !semester) return;
+  const registrationNumber = document.getElementById('signup-registration-number').value.trim();
+  const rollNumber = document.getElementById('signup-roll-number').value.trim();
+  const fullName = document.getElementById('signup-full-name').value.trim();
+  const semester = document.getElementById('signup-semester').value.trim();
+  const sessionYear = document.getElementById('signup-session-year').value.trim();
+  const department = document.getElementById('signup-department').value.trim();
+  const batch = document.getElementById('signup-batch').value.trim();
   
   try {
-    // Fetch session details
-    const res = await fetch(`/api/sessions/${code}`);
+    const res = await fetch(`${getApiBaseUrl()}/api/students/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ registrationNumber, rollNumber, fullName, semester, sessionYear, department, batch })
+    });
+    
+    const data = await res.json();
+    
+    if (res.ok) {
+      currentStudent = data;
+      localStorage.setItem('quizmaster-student', JSON.stringify(currentStudent));
+      populateStudentInfo();
+      switchView('join');
+    } else {
+      signupError.textContent = data.error || 'Failed to sign up';
+    }
+  } catch (err) {
+    signupError.textContent = 'Server connection error';
+  }
+});
+
+// Login Flow
+loginForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  const registrationNumber = document.getElementById('login-registration-number').value.trim();
+  const sessionYear = document.getElementById('login-session-year').value.trim();
+
+  if (!registrationNumber || !sessionYear) return;
+
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/api/students/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ registrationNumber, sessionYear })
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      currentStudent = data;
+      localStorage.setItem('quizmaster-student', JSON.stringify(currentStudent));
+      populateStudentInfo();
+      switchView('join');
+    } else {
+      loginError.textContent = data.error || 'Failed to login';
+    }
+  } catch (err) {
+    loginError.textContent = 'Server connection error';
+  }
+});
+
+// Join Flow
+joinBtn.addEventListener('click', async () => {
+  registrationNumber = currentStudent.registration_number;
+  roll = currentStudent.roll_number;
+  name = currentStudent.full_name;
+  semester = currentStudent.semester;
+  
+  try {
+    // Fetch active session details
+    const res = await fetch(`${getApiBaseUrl()}/api/active-session`);
     const data = await res.json();
     
     if (res.ok) {
@@ -62,7 +183,7 @@ joinForm.addEventListener('submit', async (e) => {
       // Connect WS
       connectWS();
     } else {
-      joinError.textContent = data.error || 'Failed to join session';
+      joinError.textContent = data.error || 'No active quiz session available';
     }
   } catch (err) {
     joinError.textContent = 'Server connection error';
@@ -70,8 +191,7 @@ joinForm.addEventListener('submit', async (e) => {
 });
 
 function connectWS() {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${protocol}//${window.location.host}`;
+  const wsUrl = getWsUrl();
   ws = new WebSocket(wsUrl);
   
   ws.onopen = () => {
@@ -90,12 +210,18 @@ function connectWS() {
       // Show error to student and go back to join screen
       joinError.textContent = msg.message;
       switchView('join');
-    } else if (msg.type === 'session:start' && msg.payload.code === sessionData.code) {
+    } else if (msg.type === 'session:start') {
       startQuiz(msg.payload.startTime, msg.payload.duration);
     } else if (msg.type === 'session:stop') {
       submitQuiz(true); // force submit if teacher stops
     } else if (msg.type === 'server:submitted') {
       showResult(msg.payload.score);
+    } else if (msg.type === 'server:show_answers_updated') {
+      if (msg.payload.showAnswers) {
+        document.getElementById('view-answers-btn').style.display = 'block';
+      } else {
+        document.getElementById('view-answers-btn').style.display = 'none';
+      }
     }
   };
   
@@ -144,6 +270,7 @@ function renderQuestions() {
     qCard.className = 'question-card';
     qCard.innerHTML = `
       <div class="q-text">${index + 1}. ${q.text}</div>
+      ${q.image ? `<img src="${q.image}" style="max-width: 100%; max-height: 300px; border-radius: 8px; margin: 12px 0;">` : ''}
       <div class="options-list">
         <label class="option-label">
           <input type="radio" name="q-${q.id}" value="a" onchange="recordAnswer(${q.id}, 'a')">
@@ -213,19 +340,94 @@ function submitQuiz(timedOut) {
     ws.send(JSON.stringify({ type: 'client:submit', payload }));
   } else {
     // Fallback HTTP
-    fetch('/api/submit', {
+    fetch(`${getApiBaseUrl()}/api/submit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     }).then(res => res.json())
-      .then(data => showResult(data.score))
-      .catch(err => alert('Failed to submit'));
+    .then(data => showResult(data.score))
+    .catch(err => alert('Failed to submit'));
   }
 }
 
 function showResult(score) {
   switchView('result');
   finalScoreEl.textContent = score;
+  
+  // Check if answers are available
+  checkAnswersAvailable();
+}
+
+async function checkAnswersAvailable() {
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/api/sessions/${sessionId}/questions`);
+    if (res.ok) {
+      document.getElementById('view-answers-btn').style.display = 'block';
+    } else {
+      // Retry every 5 seconds
+      setTimeout(checkAnswersAvailable, 5000);
+    }
+  } catch (err) {
+    setTimeout(checkAnswersAvailable, 5000);
+  }
+}
+
+document.getElementById('view-answers-btn').addEventListener('click', async () => {
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/api/sessions/${sessionId}/questions`);
+    const questions = await res.json();
+    renderAnswers(questions);
+    switchView('answers');
+  } catch (err) {
+    alert('Failed to load answers');
+  }
+});
+
+document.getElementById('go-back-to-result-btn').addEventListener('click', () => {
+  switchView('result');
+});
+
+function renderAnswers(questions) {
+  const container = document.getElementById('answers-container');
+  container.innerHTML = '';
+  
+  questions.forEach((q, i) => {
+    const studentAnswer = answers[q.id];
+    const isCorrect = studentAnswer === q.correct_opt;
+    
+    const qCard = document.createElement('div');
+    qCard.className = 'question-card';
+    qCard.innerHTML = `
+      <div class="q-text" style="margin-bottom: 12px;">${i + 1}. ${q.text}</div>
+      ${q.image ? `<img src="${q.image}" style="max-width: 100%; max-height: 300px; border-radius: 8px; margin: 12px 0;">` : ''}
+      <div class="options-list" style="margin-bottom: 12px;">
+        <label class="option-label" style="background: ${q.correct_opt === 'a' ? 'var(--success-bg)' : (studentAnswer === 'a' ? 'var(--danger-bg)' : 'transparent')};">
+          <span class="option-text">A. ${q.opt_a}</span>
+          ${q.correct_opt === 'a' ? '<span style="color: var(--success); font-weight: bold;">✓ Correct</span>' : ''}
+          ${studentAnswer === 'a' && q.correct_opt !== 'a' ? '<span style="color: var(--danger); font-weight: bold;">✗ Your Answer</span>' : ''}
+        </label>
+        <label class="option-label" style="background: ${q.correct_opt === 'b' ? 'var(--success-bg)' : (studentAnswer === 'b' ? 'var(--danger-bg)' : 'transparent')};">
+          <span class="option-text">B. ${q.opt_b}</span>
+          ${q.correct_opt === 'b' ? '<span style="color: var(--success); font-weight: bold;">✓ Correct</span>' : ''}
+          ${studentAnswer === 'b' && q.correct_opt !== 'b' ? '<span style="color: var(--danger); font-weight: bold;">✗ Your Answer</span>' : ''}
+        </label>
+        <label class="option-label" style="background: ${q.correct_opt === 'c' ? 'var(--success-bg)' : (studentAnswer === 'c' ? 'var(--danger-bg)' : 'transparent')};">
+          <span class="option-text">C. ${q.opt_c}</span>
+          ${q.correct_opt === 'c' ? '<span style="color: var(--success); font-weight: bold;">✓ Correct</span>' : ''}
+          ${studentAnswer === 'c' && q.correct_opt !== 'c' ? '<span style="color: var(--danger); font-weight: bold;">✗ Your Answer</span>' : ''}
+        </label>
+        <label class="option-label" style="background: ${q.correct_opt === 'd' ? 'var(--success-bg)' : (studentAnswer === 'd' ? 'var(--danger-bg)' : 'transparent')};">
+          <span class="option-text">D. ${q.opt_d}</span>
+          ${q.correct_opt === 'd' ? '<span style="color: var(--success); font-weight: bold;">✓ Correct</span>' : ''}
+          ${studentAnswer === 'd' && q.correct_opt !== 'd' ? '<span style="color: var(--danger); font-weight: bold;">✗ Your Answer</span>' : ''}
+        </label>
+      </div>
+      <p style="margin: 0; padding: 8px; border-radius: 4px; background: ${isCorrect ? 'var(--success-bg)' : 'var(--danger-bg)'};">
+        ${isCorrect ? '✓ You got this right!' : '✗ You got this wrong.'}
+      </p>
+    `;
+    container.appendChild(qCard);
+  });
 }
 
 init();

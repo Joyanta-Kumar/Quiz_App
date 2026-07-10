@@ -4,9 +4,11 @@ let serverIp = 'localhost';
 let serverPort = 3000;
 let ws = null;
 let currentSessionId = null;
-let currentSessionCode = null;
+let currentQuizId = null;
 let isJoinsClosed = false;
 let isQuizStarted = false;
+let showAnswersToStudents = false;
+let showTeacherAnswers = false;
 
 // DOM Elements
 const views = document.querySelectorAll('.view');
@@ -25,6 +27,11 @@ let isSelectModeDashboard = false;
 let selectedQuizzes = new Set();
 let isSelectModeHistory = false;
 let selectedSessions = new Set();
+let allHistorySessions = [];
+let deletedItems = [];
+let isSelectModeRecycle = false;
+let selectedRecycleItems = new Set();
+let currentRecycleItem = null;
 
 // Update server status UI
 function updateServerStatusUI(isRunning) {
@@ -51,6 +58,26 @@ function updateServerStatusUI(isRunning) {
     serverStatusDotEl.style.background = 'var(--text-muted)';
     serverIpEl.textContent = 'Not Available';
   }
+}
+
+// Initialize server IP click handler
+if (serverIpEl) {
+  serverIpEl.addEventListener('click', async () => {
+    // Only copy if server is running (text is not "Waiting..." or "Not Available")
+    if (serverIpEl.textContent && serverIpEl.textContent !== 'Waiting...' && serverIpEl.textContent !== 'Not Available') {
+      try {
+        await navigator.clipboard.writeText(serverIpEl.textContent);
+        const originalText = serverIpEl.textContent;
+        serverIpEl.textContent = 'Copied!';
+        setTimeout(() => {
+          serverIpEl.textContent = originalText;
+        }, 2000);
+      } catch (err) {
+        console.error('Failed to copy: ', err);
+        alert('Failed to copy server info');
+      }
+    }
+  });
 }
 
 // Initialize
@@ -178,22 +205,240 @@ window.switchView = function(viewId) {
   
   if (viewId === 'dashboard') loadQuizzes();
   if (viewId === 'history') loadHistory();
+  if (viewId === 'students') loadStudents();
+  if (viewId === 'recycle') loadDeletedItems();
 }
+
+let allStudents = [];
+
+async function loadStudents() {
+  const container = document.getElementById('students-container');
+  
+  allStudents = await ipcRenderer.invoke('db:getAllStudents');
+  
+  if (allStudents.length === 0) {
+    container.innerHTML = '<p class="text-muted">No students registered yet.</p>';
+    return;
+  }
+  
+  // Separate unverified and verified students
+  const unverifiedStudents = allStudents.filter(s => !s.verified);
+  const verifiedStudents = allStudents.filter(s => s.verified);
+  
+  // Group verified students by department + batch + session
+  const grouped = {};
+  verifiedStudents.forEach(student => {
+    const key = `${student.department || 'Uncategorized'}-${student.batch || 'Uncategorized'}-${student.session_year || 'Uncategorized'}`;
+    if (!grouped[key]) {
+      grouped[key] = {
+        dept: student.department || 'Uncategorized',
+        batch: student.batch || 'Uncategorized',
+        session: student.session_year || 'Uncategorized',
+        students: []
+      };
+    }
+    grouped[key].students.push(student);
+  });
+  
+  // Sanitize helper
+  const sanitize = (text) => {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  };
+  
+  let html = '';
+  
+  // Unverified students section
+  if (unverifiedStudents.length > 0) {
+    html += `
+      <div style="margin-bottom: 24px;">
+        <h2 style="margin-bottom: 16px; color: var(--danger);">Unverified Students (${unverifiedStudents.length})</h2>
+        <div class="table-container">
+          <table class="submissions-table">
+            <thead>
+              <tr>
+                <th>Reg No</th>
+                <th>Roll</th>
+                <th>Name</th>
+                <th>Semester</th>
+                <th>Dept</th>
+                <th>Batch</th>
+                <th>Session</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${unverifiedStudents.sort((a,b) => a.full_name.localeCompare(b.full_name)).map(student => `
+                <tr>
+                  <td>${sanitize(student.registration_number || 'N/A')}</td>
+                  <td>${sanitize(student.roll_number || 'N/A')}</td>
+                  <td>${sanitize(student.full_name || 'N/A')}</td>
+                  <td>${sanitize(student.semester || 'N/A')}</td>
+                  <td>${sanitize(student.department || 'N/A')}</td>
+                  <td>${sanitize(student.batch || 'N/A')}</td>
+                  <td>${sanitize(student.session_year || 'N/A')}</td>
+                  <td style="display: flex; gap: 8px;">
+                    <button class="btn btn-success" onclick="window.verifyStudent(${student.id})" style="padding: 4px 8px;">Verify</button>
+                    <button class="btn btn-danger" onclick="window.deleteStudent(${student.id})" style="padding: 4px 8px;">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                      </svg>
+                    </button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+  
+  // Verified groups section
+  if (Object.keys(grouped).length > 0) {
+    html += `
+      <div>
+        <h2 style="margin-bottom: 16px;">Verified Groups</h2>
+        <div id="students-grid" class="quizzes-grid"></div>
+      </div>
+    `;
+  }
+  
+  container.innerHTML = html;
+  
+  // Render verified groups
+  if (Object.keys(grouped).length > 0) {
+    const grid = document.getElementById('students-grid');
+    Object.keys(grouped).sort().forEach(key => {
+      const group = grouped[key];
+      const card = document.createElement('div');
+      card.className = 'quiz-card';
+      
+      card.innerHTML = `
+        <div>
+          <h3>${sanitize(group.dept)} - Batch ${sanitize(group.batch)}</h3>
+          <p>Session: ${sanitize(group.session)}</p>
+          <p>${group.students.length} student${group.students.length !== 1 ? 's' : ''}</p>
+          <div class="card-actions">
+            <button class="btn btn-primary" onclick="window.viewBatchStudents('${key}')">View Students</button>
+          </div>
+        </div>
+      `;
+      
+      grid.appendChild(card);
+    });
+  }
+}
+
+window.viewBatchStudents = function(key) {
+  const container = document.getElementById('students-container');
+  const group = allStudents.reduce((acc, s) => {
+    const sKey = `${s.department || 'Uncategorized'}-${s.batch || 'Uncategorized'}-${s.session_year || 'Uncategorized'}`;
+    if (sKey === key) {
+      acc.dept = s.department || 'Uncategorized';
+      acc.batch = s.batch || 'Uncategorized';
+      acc.session = s.session_year || 'Uncategorized';
+      acc.students.push(s);
+    }
+    return acc;
+  }, { dept: '', batch: '', session: '', students: [] });
+  
+  // Sanitize
+  const sanitize = (text) => {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  };
+  
+  container.innerHTML = `
+    <button class="btn btn-secondary" onclick="loadStudents()" style="margin-bottom: 16px;">
+      ← Back to Batches
+    </button>
+    <h2 style="margin-bottom: 16px;">${sanitize(group.dept)} - Batch ${sanitize(group.batch)} (Session ${sanitize(group.session)})</h2>
+    <div class="table-container">
+      <table class="submissions-table">
+        <thead>
+          <tr>
+            <th>Reg No</th>
+            <th>Roll</th>
+            <th>Name</th>
+            <th>Semester</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${group.students.sort((a,b) => a.full_name.localeCompare(b.full_name)).map(student => `
+            <tr>
+              <td>${sanitize(student.registration_number || 'N/A')}</td>
+              <td>${sanitize(student.roll_number || 'N/A')}</td>
+              <td>${sanitize(student.full_name || 'N/A')}</td>
+              <td>${sanitize(student.semester || 'N/A')}</td>
+              <td>
+                <button class="btn btn-danger" onclick="window.deleteStudent(${student.id})" style="padding: 4px 8px;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                  </svg>
+                </button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+};
+
+window.verifyStudent = async function(id) {
+  if (confirm('Are you sure you want to verify this student?')) {
+    await ipcRenderer.invoke('db:verifyStudent', id);
+    loadStudents();
+  }
+};
+
+window.deleteStudent = async function(id) {
+  if (confirm('Are you sure you want to delete this student?')) {
+    await ipcRenderer.invoke('db:deleteStudent', id);
+    loadStudents();
+  }
+};
 
 // History functions
 async function loadHistory() {
   const historyContainer = document.getElementById('history-container');
   const history = await ipcRenderer.invoke('db:getSessionsHistory');
+  allHistorySessions = history;
 
   if (history.length === 0) {
     historyContainer.innerHTML = '<p class="text-muted">No quiz history found.</p>';
+    updateHistorySelectAllButton(history);
     return;
   }
 
-  historyContainer.innerHTML = history.map(session => {
-    console.log('Session:', session.id, 'Raw created_at:', session.created_at);
+  historyContainer.innerHTML = '';
+  
+  history.forEach(session => {
+    const card = document.createElement('div');
+    card.className = 'quiz-card history-item';
+    card.dataset.sessionId = session.id;
+    const isSelected = selectedSessions.has(session.id);
+    
+    // Sanitize user inputs to prevent XSS
+    const sanitize = (text) => {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    };
+    
+    const title = sanitize(session.title || 'Untitled');
+    const semester = session.semester ? sanitize(session.semester) : '';
     const dateObj = new Date(session.created_at);
-    console.log('Session:', session.id, 'Parsed date (UTC):', dateObj.toISOString());
     const date = dateObj.toLocaleString('en-BD', { 
       timeZone: 'Asia/Dhaka',
       year: 'numeric',
@@ -203,34 +448,102 @@ async function loadHistory() {
       minute: '2-digit',
       hour12: true
     });
-    console.log('Session:', session.id, 'Formatted BDT:', date);
-    const lowestScore = session.lowest_score !== null ? session.lowest_score : 'N/A';
-    const highestScore = session.highest_score !== null ? session.highest_score : 'N/A';
-    const isSelected = selectedSessions.has(session.id);
-    return `
-      <div class="history-item" style="padding: 16px; border-bottom: 1px solid var(--panel-border); display: flex; justify-content: space-between; align-items: center;">
-        <div style="display: flex; gap: 12px; align-items: flex-start; flex: 1;">
-          ${isSelectModeHistory ? `
-            <input type="checkbox" ${isSelected ? 'checked' : ''} 
-              onclick="event.stopPropagation(); window.toggleSessionSelection(${session.id})"
-              style="width: 18px; height: 18px; cursor: pointer; margin-top: 4px;">
-          ` : ''}
-          <div>
-            <h3 style="margin: 0;">${session.title}${session.semester ? ` (${session.semester})` : ''}</h3>
-            <p style="margin: 4px 0 0 0; color: var(--text-muted); font-size: 0.875rem;">
-              ${date} | ${session.submission_count} submissions | Low: ${lowestScore}, High: ${highestScore}
-            </p>
-          </div>
-        </div>
-        ${!isSelectModeHistory ? `
-          <div style="display: flex; gap: 8px;">
-            <button class="btn btn-secondary" onclick="window.viewSessionResults(${session.id}, '${session.title}')">View Results</button>
-            <button class="btn btn-secondary" onclick="window.exportSession(${session.id})">Export CSV</button>
-          </div>
+    
+    if (isSelectModeHistory) {
+      card.onclick = () => window.toggleSessionSelection(session.id);
+    } else {
+      card.onclick = () => card.classList.toggle('expanded');
+    }
+    
+    // Create safe data attribute for session details
+    card.dataset.sessionData = JSON.stringify(session);
+    
+    card.innerHTML = `
+      <div style="display: flex; gap: 12px; align-items: flex-start; width: 100%;">
+        ${isSelectModeHistory ? `
+          <input type="checkbox" ${isSelected ? 'checked' : ''} 
+            onclick="event.stopPropagation(); window.toggleSessionSelection(${session.id})"
+            style="width: 18px; height: 18px; cursor: pointer; margin-top: 4px;">
         ` : ''}
+        <div style="flex: 1; display: flex; justify-content: space-between; align-items: flex-start;">
+          <div>
+            <h3 style="margin: 0;">${title}${semester ? ` (${semester})` : ''}</h3>
+            ${!isSelectModeHistory ? `
+              <div class="history-item-actions">
+                <button class="btn btn-secondary" onclick="event.stopPropagation(); window.viewSessionDetails(${session.id})">Details</button>
+                <button class="btn btn-secondary" onclick="event.stopPropagation(); window.viewSessionResults(${session.id}, '${title.replace(/'/g, "\\'")}')">View Results</button>
+                <button class="btn btn-secondary" onclick="event.stopPropagation(); window.openViewQuestionsModal(${session.quiz_id}, '${title.replace(/'/g, "\\'")}')">Questions</button>
+                <button class="btn btn-secondary" onclick="event.stopPropagation(); window.exportSession(${session.id})">Export</button>
+              </div>
+            ` : ''}
+          </div>
+          <p style="color: var(--text-muted); font-size: 0.875rem; margin: 0; white-space: nowrap;">
+            ${date}
+          </p>
+        </div>
       </div>
     `;
-  }).join('');
+    historyContainer.appendChild(card);
+  });
+
+  // Update select all button text
+  updateHistorySelectAllButton(history);
+}
+
+window.viewSessionDetails = function(sessionId) {
+  const session = allHistorySessions.find(s => s.id === sessionId);
+  if (!session) return;
+  
+  const modal = document.getElementById('session-details-modal');
+  const body = document.getElementById('session-details-body');
+  
+  const dateObj = new Date(session.created_at);
+  const date = dateObj.toLocaleString('en-BD', { 
+    timeZone: 'Asia/Dhaka',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+  
+  body.innerHTML = `
+    <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(203, 166, 247, 0.12);">
+      <span style="color: var(--text-muted);">ID:</span>
+      <span style="color: var(--text-primary);">${session.id}</span>
+    </div>
+    <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(203, 166, 247, 0.12);">
+      <span style="color: var(--text-muted);">Title:</span>
+      <span style="color: var(--text-primary);">${session.title}</span>
+    </div>
+    <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(203, 166, 247, 0.12);">
+      <span style="color: var(--text-muted);">Semester:</span>
+      <span style="color: var(--text-primary);">${session.semester || 'N/A'}</span>
+    </div>
+    <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(203, 166, 247, 0.12);">
+      <span style="color: var(--text-muted);">Date:</span>
+      <span style="color: var(--text-primary);">${date}</span>
+    </div>
+    <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(203, 166, 247, 0.12);">
+      <span style="color: var(--text-muted);">Submissions:</span>
+      <span style="color: var(--text-primary);">${session.submission_count}</span>
+    </div>
+    <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(203, 166, 247, 0.12);">
+      <span style="color: var(--text-muted);">Lowest Score:</span>
+      <span style="color: var(--text-primary);">${session.lowest_score !== null ? session.lowest_score : 'N/A'}</span>
+    </div>
+    <div style="display: flex; justify-content: space-between; padding: 8px 0;">
+      <span style="color: var(--text-muted);">Highest Score:</span>
+      <span style="color: var(--text-primary);">${session.highest_score !== null ? session.highest_score : 'N/A'}</span>
+    </div>
+  `;
+  
+  modal.classList.add('active');
+}
+
+window.closeSessionDetailsModal = function() {
+  document.getElementById('session-details-modal').classList.remove('active');
 }
 
 window.deleteSession = async function(sessionId) {
@@ -252,19 +565,24 @@ window.viewSessionResults = async function(sessionId, title) {
   document.getElementById('view-results-title').textContent = `${title} - Results`;
   
   // Fetch submissions
-  const submissions = await ipcRenderer.invoke('db:getSubmissionsBySession', sessionId);
+  let submissions = await ipcRenderer.invoke('db:getSubmissionsBySession', sessionId);
   const tbody = document.getElementById('view-results-body');
   tbody.innerHTML = '';
   
   if (submissions.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">No submissions found.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">No submissions found.</td></tr>';
   } else {
-    submissions.forEach(sub => {
+    // Sort submissions by score descending
+    submissions.sort((a, b) => b.score - a.score);
+    
+    submissions.forEach((sub, index) => {
       const tr = document.createElement('tr');
       const statusClass = sub.timed_out ? 'status-timeout' : 'status-submitted';
       const statusText = sub.timed_out ? 'Timeout' : 'Submitted';
+      const rank = index + 1;
       
       tr.innerHTML = `
+        <td><strong>${rank}</strong></td>
         <td>${sub.registration_number || 'N/A'}</td>
         <td>${sub.roll}</td>
         <td>${sub.name}${sub.semester ? ` (${sub.semester})` : ''}</td>
@@ -300,6 +618,21 @@ window.toggleQuizSelection = function(quizId) {
     selectedQuizzes.add(quizId);
   }
   updateDashboardDeleteBtn();
+  loadQuizzes();
+};
+
+window.toggleDashboardSelectAll = async function() {
+  const allQuizzes = await ipcRenderer.invoke('db:getQuizzes');
+  const allSelected = allQuizzes.every(quiz => selectedQuizzes.has(quiz.id));
+
+  if (allSelected) {
+    selectedQuizzes.clear();
+  } else {
+    selectedQuizzes = new Set(allQuizzes.map(quiz => quiz.id));
+  }
+
+  updateDashboardDeleteBtn();
+  loadQuizzes();
 };
 
 function updateDashboardDeleteBtn() {
@@ -311,20 +644,40 @@ function updateDashboardDeleteBtn() {
   }
 }
 
+function updateDashboardSelectAllButton() {
+  const selectAllBtn = document.getElementById('dashboard-select-all-btn');
+  if (!selectAllBtn) return;
+
+  if (!isSelectModeDashboard) {
+    selectAllBtn.style.display = 'none';
+    return;
+  }
+
+  selectAllBtn.style.display = 'flex';
+  selectAllBtn.style.alignItems = 'center';
+  selectAllBtn.style.gap = '4px';
+  
+  const allSelected = quizzes.every(quiz => selectedQuizzes.has(quiz.id));
+  selectAllBtn.textContent = allSelected ? 'Deselect All' : 'Select All';
+}
+
 function updateDashboardUI() {
   const selectBtn = document.getElementById('dashboard-select-btn');
   const deleteBtn = document.getElementById('dashboard-delete-selected-btn');
+  const selectAllBtn = document.getElementById('dashboard-select-all-btn');
   const newQuizBtn = selectBtn?.parentElement?.querySelector('.btn-primary');
 
   if (isSelectModeDashboard) {
     selectBtn?.classList.add('btn-primary');
     selectBtn?.classList.remove('btn-secondary');
     if (newQuizBtn) newQuizBtn.style.display = 'none';
+    if (selectAllBtn) selectAllBtn.style.display = 'flex';
   } else {
     selectBtn?.classList.remove('btn-primary');
     selectBtn?.classList.add('btn-secondary');
     if (newQuizBtn) newQuizBtn.style.display = 'flex';
     if (deleteBtn) deleteBtn.style.display = 'none';
+    if (selectAllBtn) selectAllBtn.style.display = 'none';
   }
 
   loadQuizzes();
@@ -357,6 +710,21 @@ window.toggleSessionSelection = function(sessionId) {
     selectedSessions.add(sessionId);
   }
   updateHistoryDeleteBtn();
+  loadHistory();
+};
+
+window.toggleHistorySelectAll = async function() {
+  const history = await ipcRenderer.invoke('db:getSessionsHistory');
+  const allSelected = history.every(session => selectedSessions.has(session.id));
+
+  if (allSelected) {
+    selectedSessions.clear();
+  } else {
+    selectedSessions = new Set(history.map(session => session.id));
+  }
+
+  updateHistoryDeleteBtn();
+  loadHistory();
 };
 
 function updateHistoryDeleteBtn() {
@@ -368,17 +736,37 @@ function updateHistoryDeleteBtn() {
   }
 }
 
+function updateHistorySelectAllButton(history) {
+  const selectAllBtn = document.getElementById('history-select-all-btn');
+  if (!selectAllBtn || !history) return;
+
+  if (!isSelectModeHistory) {
+    selectAllBtn.style.display = 'none';
+    return;
+  }
+
+  selectAllBtn.style.display = 'flex';
+  selectAllBtn.style.alignItems = 'center';
+  selectAllBtn.style.gap = '4px';
+  
+  const allSelected = history.every(session => selectedSessions.has(session.id));
+  selectAllBtn.textContent = allSelected ? 'Deselect All' : 'Select All';
+}
+
 function updateHistoryUI() {
   const selectBtn = document.getElementById('history-select-btn');
   const deleteBtn = document.getElementById('history-delete-selected-btn');
+  const selectAllBtn = document.getElementById('history-select-all-btn');
 
   if (isSelectModeHistory) {
     selectBtn?.classList.add('btn-primary');
     selectBtn?.classList.remove('btn-secondary');
+    if (selectAllBtn) selectAllBtn.style.display = 'flex';
   } else {
     selectBtn?.classList.remove('btn-primary');
     selectBtn?.classList.add('btn-secondary');
     if (deleteBtn) deleteBtn.style.display = 'none';
+    if (selectAllBtn) selectAllBtn.style.display = 'none';
   }
 
   loadHistory();
@@ -424,6 +812,7 @@ async function loadQuizzes() {
   
   if (quizzes.length === 0) {
     quizzesGrid.innerHTML = '<p class="text-muted">No quizzes found. Create one!</p>';
+    updateDashboardSelectAllButton();
     return;
   }
   
@@ -452,6 +841,10 @@ async function loadQuizzes() {
       detailsHtml += `<p><small>Session: ${session}</small></p>`;
     }
     
+    if (isSelectModeDashboard) {
+      card.onclick = () => window.toggleQuizSelection(quiz.id);
+    }
+    
     card.innerHTML = `
       <div style="display: flex; gap: 12px; align-items: flex-start; width: 100%;">
         ${isSelectModeDashboard ? `
@@ -464,6 +857,7 @@ async function loadQuizzes() {
           ${detailsHtml}
           ${!isSelectModeDashboard ? `
             <div class="card-actions">
+              <button class="btn btn-secondary" onclick="openViewQuestionsModal(${quiz.id}, '${title.replace(/'/g, "\\'")}')">View Questions</button>
               <button class="btn btn-primary" onclick="openStartSessionModal(${quiz.id}, '${title.replace(/'/g, "\\'")}')">Start Session</button>
             </div>
           ` : ''}
@@ -472,7 +866,54 @@ async function loadQuizzes() {
     `;
     quizzesGrid.appendChild(card);
   });
+  
+  updateDashboardSelectAllButton();
 }
+
+window.openViewQuestionsModal = async function(quizId, title) {
+  document.getElementById('view-questions-title').textContent = title + ' - Questions';
+  const body = document.getElementById('view-questions-body');
+  
+  const questions = await ipcRenderer.invoke('db:getQuestionsByQuiz', quizId);
+  
+  if (questions.length === 0) {
+    body.innerHTML = '<p class="text-muted">No questions found for this quiz.</p>';
+  } else {
+    body.innerHTML = questions.map((q, i) => {
+      const optLabels = { a: q.opt_a, b: q.opt_b, c: q.opt_c, d: q.opt_d };
+      const correctLabel = optLabels[q.correct_opt];
+      
+      return `
+        <div style="padding: 12px; border: 1px solid var(--panel-border); border-radius: 8px; margin-bottom: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+            <h4 style="margin: 0;">${i + 1}. ${q.text}</h4>
+            ${q.image ? `
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                <polyline points="21 15 16 10 5 21"></polyline>
+              </svg>
+            ` : ''}
+          </div>
+          ${q.image ? `<img src="${q.image}" style="max-width: 100%; max-height: 300px; border-radius: 8px; margin-bottom: 8px;">` : ''}
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+            <div style="padding: 4px 8px; border-radius: 4px; background: ${q.correct_opt === 'a' ? 'var(--success-bg)' : 'var(--panel-bg)'};">A. ${q.opt_a}</div>
+            <div style="padding: 4px 8px; border-radius: 4px; background: ${q.correct_opt === 'b' ? 'var(--success-bg)' : 'var(--panel-bg)'};">B. ${q.opt_b}</div>
+            <div style="padding: 4px 8px; border-radius: 4px; background: ${q.correct_opt === 'c' ? 'var(--success-bg)' : 'var(--panel-bg)'};">C. ${q.opt_c}</div>
+            <div style="padding: 4px 8px; border-radius: 4px; background: ${q.correct_opt === 'd' ? 'var(--success-bg)' : 'var(--panel-bg)'};">D. ${q.opt_d}</div>
+          </div>
+          <p style="margin: 0; font-weight: bold; color: var(--success);">Correct Answer: ${q.correct_opt.toUpperCase()}. ${correctLabel}</p>
+        </div>
+      `;
+    }).join('');
+  }
+  
+  document.getElementById('view-questions-modal').classList.add('active');
+};
+
+window.closeViewQuestionsModal = function() {
+  document.getElementById('view-questions-modal').classList.remove('active');
+};
 
 async function deleteQuiz(id) {
   if (confirm('Are you sure?')) {
@@ -508,33 +949,107 @@ function addQuestionUI() {
   const qDiv = document.createElement('div');
   qDiv.className = 'question-item';
   qDiv.innerHTML = `
-    <div class="form-group">
-      <label>Question Text</label>
-      <input type="text" class="q-text" placeholder="What is 2 + 2?" autocomplete="off">
-    </div>
-    <div class="options-grid">
-      <div class="option-input">
-        <input type="radio" name="correct-${index}" value="a" checked>
-        <input type="text" class="q-opt-a" placeholder="Option A" autocomplete="off">
-      </div>
-      <div class="option-input">
-        <input type="radio" name="correct-${index}" value="b">
-        <input type="text" class="q-opt-b" placeholder="Option B" autocomplete="off">
-      </div>
-      <div class="option-input">
-        <input type="radio" name="correct-${index}" value="c">
-        <input type="text" class="q-opt-c" placeholder="Option C" autocomplete="off">
-      </div>
-      <div class="option-input">
-        <input type="radio" name="correct-${index}" value="d">
-        <input type="text" class="q-opt-d" placeholder="Option D" autocomplete="off">
+    <div style="display: flex; align-items: flex-start; gap: 12px;">
+      <div style="flex: 1;">
+        <div class="form-group">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+            <label style="flex: 1;">Question Text</label>
+            <div style="display: flex; gap: 6px;">
+              <input type="file" class="q-image-input" accept="image/*" style="display: none;">
+              <button type="button" class="btn btn-secondary" style="padding: 6px 8px; font-size: 12px; min-width: 32px; min-height: 32px; display: inline-flex; align-items: center; justify-content: center;" onclick="this.closest('.form-group').querySelector('.q-image-input').click()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                  <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+              </button>
+              <button class="btn btn-danger" style="padding: 6px 8px; font-size: 12px; min-width: 32px; min-height: 32px; display: inline-flex; align-items: center; justify-content: center;" onclick="window.deleteQuestion(this)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  <line x1="10" y1="11" x2="10" y2="17"></line>
+                  <line x1="14" y1="11" x2="14" y2="17"></line>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <input type="text" class="q-text" placeholder="What is 2 + 2?" autocomplete="off">
+          <div class="q-image-preview" style="margin-top: 8px;"></div>
+        </div>
+        <div class="options-grid">
+          <div class="option-input" onclick="this.querySelector('input[type=radio]').checked = true;">
+            <input type="radio" name="correct-${index}" value="a" checked>
+            <input type="text" class="q-opt-a" placeholder="Option A" autocomplete="off" onclick="event.stopPropagation();">
+          </div>
+          <div class="option-input" onclick="this.querySelector('input[type=radio]').checked = true;">
+            <input type="radio" name="correct-${index}" value="b">
+            <input type="text" class="q-opt-b" placeholder="Option B" autocomplete="off" onclick="event.stopPropagation();">
+          </div>
+          <div class="option-input" onclick="this.querySelector('input[type=radio]').checked = true;">
+            <input type="radio" name="correct-${index}" value="c">
+            <input type="text" class="q-opt-c" placeholder="Option C" autocomplete="off" onclick="event.stopPropagation();">
+          </div>
+          <div class="option-input" onclick="this.querySelector('input[type=radio]').checked = true;">
+            <input type="radio" name="correct-${index}" value="d">
+            <input type="text" class="q-opt-d" placeholder="Option D" autocomplete="off" onclick="event.stopPropagation();">
+          </div>
+        </div>
       </div>
     </div>
   `;
   container.appendChild(qDiv);
   
+  // Add event listener to image input
+  const imageInput = qDiv.querySelector('.q-image-input');
+  const imagePreview = qDiv.querySelector('.q-image-preview');
+  imageInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target.result;
+        imagePreview.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <img src="${base64}" style="max-width: 200px; max-height: 150px; border-radius: 8px;">
+            <button type="button" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" onclick="this.closest('.q-image-preview').innerHTML = ''; this.closest('.question-item').querySelector('.q-image-input').value = '';">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        `;
+        // Store base64 in a data attribute for easy access
+        imagePreview.dataset.base64 = base64;
+      };
+      reader.readAsDataURL(file);
+    }
+  });
+  
   // Ensure newly added inputs are interactive
   ensureFormInputsActive();
+}
+
+window.deleteQuestion = function(btn) {
+  const questionItem = btn.closest('.question-item');
+  if (questionItem) {
+    questionItem.remove();
+    reindexQuestions();
+  }
+};
+
+
+
+function reindexQuestions() {
+  const container = document.getElementById('questions-container');
+  if (!container) return;
+  const questionItems = container.querySelectorAll('.question-item');
+  questionItems.forEach((item, index) => {
+    const radios = item.querySelectorAll('input[type="radio"]');
+    radios.forEach(radio => {
+      radio.name = `correct-${index}`;
+    });
+  });
 }
 
 // Helper function to ensure all form inputs are interactive
@@ -620,6 +1135,8 @@ async function saveQuiz() {
       const opt_c = item.querySelector('.q-opt-c').value.trim();
       const opt_d = item.querySelector('.q-opt-d').value.trim();
       const correct_opt = item.querySelector(`input[name="correct-${i}"]:checked`).value;
+      const imagePreview = item.querySelector('.q-image-preview');
+      const image = imagePreview && imagePreview.dataset.base64 ? imagePreview.dataset.base64 : null;
       
       if (text) {
         await ipcRenderer.invoke(
@@ -630,7 +1147,8 @@ async function saveQuiz() {
           opt_b, 
           opt_c, 
           opt_d, 
-          correct_opt
+          correct_opt,
+          image
         );
       }
     }
@@ -661,9 +1179,40 @@ window.openStartSessionModal = function(quizId, title) {
   }
   
   pendingQuizId = quizId;
+  currentQuizId = quizId;
   document.getElementById('modal-quiz-title').textContent = `Starting: ${title}`;
-  document.getElementById('session-code-input').value = Math.floor(100000 + Math.random() * 900000).toString();
   document.getElementById('start-session-modal').classList.add('active');
+}
+
+async function loadLiveQuestionsAndAnswers() {
+  if (!currentQuizId) return;
+  
+  const questions = await ipcRenderer.invoke('db:getQuestionsByQuiz', currentQuizId);
+  const container = document.getElementById('live-questions-container');
+  
+  if (questions.length === 0) {
+    container.innerHTML = '<p class="text-muted">No questions found.</p>';
+  } else {
+    container.innerHTML = questions.map((q, i) => {
+      return `
+        <div style="padding: 12px; border: 1px solid var(--panel-border); border-radius: 8px; margin-bottom: 12px;">
+          <h4 style="margin: 0 0 8px 0;">${i + 1}. ${q.text}</h4>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+            <div style="padding: 4px 8px; border-radius: 4px; background: ${q.correct_opt === 'a' ? 'var(--success-bg)' : 'var(--panel-bg)'};">A. ${q.opt_a}</div>
+            <div style="padding: 4px 8px; border-radius: 4px; background: ${q.correct_opt === 'b' ? 'var(--success-bg)' : 'var(--panel-bg)'};">B. ${q.opt_b}</div>
+            <div style="padding: 4px 8px; border-radius: 4px; background: ${q.correct_opt === 'c' ? 'var(--success-bg)' : 'var(--panel-bg)'};">C. ${q.opt_c}</div>
+            <div style="padding: 4px 8px; border-radius: 4px; background: ${q.correct_opt === 'd' ? 'var(--success-bg)' : 'var(--panel-bg)'};">D. ${q.opt_d}</div>
+          </div>
+          <p style="margin: 0; font-weight: bold; color: var(--success);">Correct Answer: ${q.correct_opt.toUpperCase()}</p>
+        </div>
+      `;
+    }).join('');
+  }
+  
+  // Show answers panel, hide submissions panel
+  document.getElementById('live-submissions-panel').style.display = 'none';
+  document.getElementById('live-answers-panel').style.display = 'flex';
+  document.getElementById('live-answers-panel').style.flexDirection = 'column';
 }
 
 window.closeModal = function() {
@@ -671,11 +1220,9 @@ window.closeModal = function() {
 }
 
 document.getElementById('confirm-start-btn').addEventListener('click', () => {
-  const code = document.getElementById('session-code-input').value;
-  currentSessionCode = code;
   ws.send(JSON.stringify({
     type: 'session:start',
-    payload: { code, quizId: pendingQuizId }
+    payload: { quizId: pendingQuizId }
   }));
   closeModal();
   window.switchView('live');
@@ -717,12 +1264,67 @@ function updateLiveSessionUI(status, isNewSession = false) {
       document.getElementById('submissions-body').innerHTML = '';
       document.getElementById('student-count').textContent = '0';
       isQuizStarted = false; // Reset quiz started state for new session
+      showAnswersToStudents = false; // Reset show answers state for new session
+      showTeacherAnswers = false;
+      
+      // Reset panels
+      const studentsPanel = document.querySelector('.students-panel');
+      studentsPanel.style.display = 'flex';
+      studentsPanel.style.flexDirection = 'column';
+      document.getElementById('live-submissions-panel').style.display = 'flex';
+      document.getElementById('live-submissions-panel').style.flexDirection = 'column';
+      document.getElementById('live-answers-panel').style.display = 'none';
     }
     exportBtn.disabled = true;
   } else if (status === 'stopped') {
-    controls.innerHTML = `<span style="color: var(--text-muted); font-weight: 600;">Session Completed</span>`;
+    const showAnswersBtnClass = showAnswersToStudents ? 'btn-success' : 'btn-secondary';
+    const showAnswersBtnText = showAnswersToStudents ? 'Hide Answers from Students' : 'Show Answers to Students';
+    const viewAnswersBtnText = showTeacherAnswers ? 'Hide Questions and Answers' : 'View Questions and Answers';
+    controls.innerHTML = `
+      <div style="display: flex; gap: 16px; align-items: center;">
+        <span style="color: var(--text-muted); font-weight: 600;">Session Completed</span>
+        <button class="btn btn-secondary" onclick="window.toggleTeacherAnswers()">${viewAnswersBtnText}</button>
+        <button class="btn ${showAnswersBtnClass}" onclick="window.toggleShowAnswersToStudents()">${showAnswersBtnText}</button>
+      </div>
+    `;
     exportBtn.disabled = false;
   }
+}
+
+window.toggleShowAnswersToStudents = async function() {
+  if (!currentSessionId) return;
+  
+  showAnswersToStudents = !showAnswersToStudents;
+  await ipcRenderer.invoke('db:toggleShowAnswers', currentSessionId);
+  
+  // Send WebSocket message to server
+  ws.send(JSON.stringify({ 
+    type: 'session:toggle_show_answers', 
+    payload: { sessionId: currentSessionId, showAnswers: showAnswersToStudents } 
+  }));
+  
+  updateLiveSessionUI('stopped');
+}
+
+window.toggleTeacherAnswers = async function() {
+  showTeacherAnswers = !showTeacherAnswers;
+  const studentsPanel = document.querySelector('.students-panel');
+  
+  if (showTeacherAnswers) {
+    await loadLiveQuestionsAndAnswers();
+    studentsPanel.style.display = 'none';
+    document.getElementById('live-submissions-panel').style.display = 'none';
+    document.getElementById('live-answers-panel').style.display = 'flex';
+    document.getElementById('live-answers-panel').style.flexDirection = 'column';
+  } else {
+    studentsPanel.style.display = 'flex';
+    studentsPanel.style.flexDirection = 'column';
+    document.getElementById('live-answers-panel').style.display = 'none';
+    document.getElementById('live-submissions-panel').style.display = 'flex';
+    document.getElementById('live-submissions-panel').style.flexDirection = 'column';
+  }
+  
+  updateLiveSessionUI('stopped');
 }
 
 window.closeJoins = function() {
@@ -748,11 +1350,6 @@ window.triggerQuizStart = function() {
     alert('No active session. Please start a session first.');
     return;
   }
-  if (!currentSessionCode) {
-    console.error('Start Quiz: No session code');
-    alert('No session code. Please start a session first.');
-    return;
-  }
   if (isQuizStarted) {
     console.warn('Quiz already started');
     return;
@@ -764,7 +1361,7 @@ window.triggerQuizStart = function() {
   }
   
   try {
-    ws.send(JSON.stringify({ type: 'session:trigger_start', payload: { code: currentSessionCode } }));
+    ws.send(JSON.stringify({ type: 'session:trigger_start', payload: {} }));
     isQuizStarted = true;
     updateLiveSessionUI('active'); // Refresh UI to show quiz started state
   } catch (err) {
@@ -828,6 +1425,321 @@ function handleSubmission(sub) {
     <td><span class="status-badge ${statusClass}">${statusText}</span></td>
   `;
   tbody.appendChild(tr);
+}
+
+// Recycle Bin
+async function loadDeletedItems() {
+  const container = document.getElementById('recycle-container');
+  
+  deletedItems = await ipcRenderer.invoke('db:getDeletedItems');
+  
+  if (deletedItems.length === 0) {
+    container.innerHTML = '<p class="text-muted" style="text-align: center; padding: 40px;">Recycle bin is empty</p>';
+    return;
+  }
+  
+  container.innerHTML = deletedItems.map((item, index) => {
+    let title, subtitle, typeIcon;
+    
+    if (item.type === 'quiz') {
+      title = item.title;
+      subtitle = `Duration: ${Math.floor(item.duration / 60)} min${item.semester ? ` • ${item.semester}` : ''}${item.session ? ` • ${item.session}` : ''}`;
+      typeIcon = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>`;
+    } else { // student
+      title = item.full_name || item.name || 'Unknown';
+      subtitle = `${item.registration_number} • ${item.roll_number} • ${item.department} • ${item.batch}`;
+      typeIcon = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`;
+    }
+    
+    const isSelected = selectedRecycleItems.has(item.id);
+    
+    return `
+      <div class="quiz-card ${isSelectModeRecycle ? 'selectable' : ''} ${isSelected ? 'selected' : ''}" onclick="window.handleRecycleItemClick(${item.id}, '${item.type}', event)" style="position: relative;">
+        ${isSelectModeRecycle ? `
+          <div class="quiz-checkbox ${isSelected ? 'checked' : ''}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          </div>
+        ` : ''}
+        <div style="display: flex; align-items: center; gap: 12px;">
+          ${typeIcon}
+          <div style="flex: 1; min-width: 0;">
+            <h3 style="margin: 0 0 4px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${title}</h3>
+            <p style="margin: 0; color: var(--text-muted); font-size: 0.875rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${subtitle}</p>
+          </div>
+          ${!isSelectModeRecycle ? `
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-primary" style="padding: 6px 12px;" onclick="event.stopPropagation(); window.restoreItem(${item.id}, '${item.type}')">Restore</button>
+              <button class="btn btn-danger" style="padding: 6px 12px;" onclick="event.stopPropagation(); window.permanentDeleteItem(${item.id}, '${item.type}')">Delete Permanently</button>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+  
+  updateRecycleSelectAllButton();
+}
+
+window.handleRecycleItemClick = function(id, type, event) {
+  if (isSelectModeRecycle) {
+    if (selectedRecycleItems.has(id)) {
+      selectedRecycleItems.delete(id);
+    } else {
+      selectedRecycleItems.add(id);
+    }
+    loadDeletedItems();
+  } else {
+    openRecycleDetailsModal(id, type);
+  }
+}
+
+window.openRecycleDetailsModal = async function(id, type) {
+  const modal = document.getElementById('recycle-details-modal');
+  const titleEl = document.getElementById('recycle-details-title');
+  const bodyEl = document.getElementById('recycle-details-body');
+  const restoreBtn = document.getElementById('recycle-details-restore-btn');
+  const deleteBtn = document.getElementById('recycle-details-delete-btn');
+  
+  const item = deletedItems.find(i => i.id === id && i.type === type);
+  if (!item) return;
+  
+  currentRecycleItem = item;
+  
+  if (type === 'quiz') {
+    titleEl.textContent = item.title;
+    // Fetch questions for the quiz to show in details
+    const questions = await ipcRenderer.invoke('db:getQuestionsByQuiz', id);
+    bodyEl.innerHTML = `
+      <div style="padding: 12px; background: var(--panel-bg); border-radius: 8px;">
+        <p style="margin: 0 0 8px 0; font-weight: 500;">Duration: ${Math.floor(item.duration / 60)} minutes</p>
+        ${item.semester ? `<p style="margin: 0 0 8px 0;">Semester: ${item.semester}</p>` : ''}
+        ${item.session ? `<p style="margin: 0 0 8px 0;">Session: ${item.session}</p>` : ''}
+        <p style="margin: 0;">Number of questions: ${questions.length}</p>
+      </div>
+      ${questions.length > 0 ? `
+        <h3 style="margin: 16px 0 8px 0;">Questions</h3>
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          ${questions.map((q, i) => `
+            <div style="padding: 12px; border: 1px solid var(--panel-border); border-radius: 8px;">
+              <h4 style="margin: 0 0 8px 0;">${i + 1}. ${q.text}</h4>
+              ${q.image ? `<img src="${q.image}" style="max-width: 100%; max-height: 200px; border-radius: 8px; margin-bottom: 8px;" />` : ''}
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+                <div style="padding: 4px 8px; border-radius: 4px; background: ${q.correct_opt === 'a' ? 'var(--success-bg)' : 'var(--panel-bg)'};">A. ${q.opt_a}</div>
+                <div style="padding: 4px 8px; border-radius: 4px; background: ${q.correct_opt === 'b' ? 'var(--success-bg)' : 'var(--panel-bg)'};">B. ${q.opt_b}</div>
+                <div style="padding: 4px 8px; border-radius: 4px; background: ${q.correct_opt === 'c' ? 'var(--success-bg)' : 'var(--panel-bg)'};">C. ${q.opt_c}</div>
+                <div style="padding: 4px 8px; border-radius: 4px; background: ${q.correct_opt === 'd' ? 'var(--success-bg)' : 'var(--panel-bg)'};">D. ${q.opt_d}</div>
+              </div>
+              <p style="margin: 0; font-weight: 500; color: var(--success);">Correct Answer: ${q.correct_opt.toUpperCase()}</p>
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+    `;
+  } else { // student
+    titleEl.textContent = item.full_name || item.name || 'Unknown';
+    bodyEl.innerHTML = `
+      <div style="padding: 12px; background: var(--panel-bg); border-radius: 8px; display: flex; flex-direction: column; gap: 8px;">
+        <p style="margin: 0;"><strong>Registration Number:</strong> ${item.registration_number}</p>
+        <p style="margin: 0;"><strong>Roll Number:</strong> ${item.roll_number}</p>
+        <p style="margin: 0;"><strong>Department:</strong> ${item.department}</p>
+        <p style="margin: 0;"><strong>Batch:</strong> ${item.batch}</p>
+        <p style="margin: 0;"><strong>Session:</strong> ${item.session_year}</p>
+        <p style="margin: 0;"><strong>Semester:</strong> ${item.semester}</p>
+        <p style="margin: 0;"><strong>Verified:</strong> ${item.verified ? 'Yes' : 'No'}</p>
+      </div>
+    `;
+  }
+  
+  // Set button click handlers
+  restoreBtn.onclick = async () => {
+    await window.restoreItem(id, type);
+    closeRecycleDetailsModal();
+  };
+  
+  deleteBtn.onclick = async () => {
+    await window.permanentDeleteItem(id, type);
+    closeRecycleDetailsModal();
+  };
+  
+  modal.classList.add('active');
+}
+
+window.closeRecycleDetailsModal = function() {
+  document.getElementById('recycle-details-modal').classList.remove('active');
+  currentRecycleItem = null;
+}
+
+window.toggleRecycleSelectMode = function() {
+  isSelectModeRecycle = !isSelectModeRecycle;
+  selectedRecycleItems.clear();
+  loadDeletedItems();
+  
+  const selectBtn = document.getElementById('recycle-select-btn');
+  const selectAllBtn = document.getElementById('recycle-select-all-btn');
+  const restoreBtn = document.getElementById('recycle-restore-selected-btn');
+  const deleteBtn = document.getElementById('recycle-permanent-delete-selected-btn');
+  
+  if (isSelectModeRecycle) {
+    selectBtn.classList.add('active');
+    selectAllBtn.style.display = 'inline-flex';
+    restoreBtn.style.display = 'inline-flex';
+    deleteBtn.style.display = 'inline-flex';
+  } else {
+    selectBtn.classList.remove('active');
+    selectAllBtn.style.display = 'none';
+    restoreBtn.style.display = 'none';
+    deleteBtn.style.display = 'none';
+  }
+}
+
+window.toggleRecycleSelectAll = function() {
+  const allIds = deletedItems.map(item => item.id);
+  const allSelected = allIds.every(id => selectedRecycleItems.has(id));
+  
+  if (allSelected) {
+    selectedRecycleItems.clear();
+  } else {
+    allIds.forEach(id => selectedRecycleItems.add(id));
+  }
+  
+  loadDeletedItems();
+}
+
+function updateRecycleSelectAllButton() {
+  const btn = document.getElementById('recycle-select-all-btn');
+  if (!btn) return;
+  
+  const allIds = deletedItems.map(item => item.id);
+  const allSelected = allIds.length > 0 && allIds.every(id => selectedRecycleItems.has(id));
+  
+  btn.textContent = allSelected ? 'Deselect All' : 'Select All';
+}
+
+window.restoreItem = async function(id, type) {
+  try {
+    if (type === 'quiz') {
+      await ipcRenderer.invoke('db:restoreQuiz', id);
+    } else {
+      await ipcRenderer.invoke('db:restoreStudent', id);
+    }
+    
+    loadDeletedItems();
+  } catch (err) {
+    console.error('Error restoring item:', err);
+    alert('Error restoring item');
+  }
+}
+
+window.permanentDeleteItem = async function(id, type) {
+  if (!confirm('Are you sure you want to delete this permanently? This cannot be undone.')) return;
+  
+  try {
+    if (type === 'quiz') {
+      await ipcRenderer.invoke('db:permanentDeleteQuiz', id);
+    } else {
+      await ipcRenderer.invoke('db:permanentDeleteStudent', id);
+    }
+    
+    loadDeletedItems();
+  } catch (err) {
+    console.error('Error deleting item:', err);
+    alert('Error deleting item');
+  }
+}
+
+window.restoreSelectedItems = async function() {
+  if (selectedRecycleItems.size === 0) return;
+  
+  try {
+    const quizIds = Array.from(selectedRecycleItems).filter(id => deletedItems.find(item => item.id === id && item.type === 'quiz')).map(Number);
+    const studentIds = Array.from(selectedRecycleItems).filter(id => deletedItems.find(item => item.id === id && item.type === 'student')).map(Number);
+    
+    if (quizIds.length > 0) {
+      await ipcRenderer.invoke('db:restoreQuizzes', quizIds);
+    }
+    
+    for (const id of studentIds) {
+      await ipcRenderer.invoke('db:restoreStudent', id);
+    }
+    
+    selectedRecycleItems.clear();
+    isSelectModeRecycle = false;
+    loadDeletedItems();
+    
+    const selectBtn = document.getElementById('recycle-select-btn');
+    const selectAllBtn = document.getElementById('recycle-select-all-btn');
+    const restoreBtn = document.getElementById('recycle-restore-selected-btn');
+    const deleteBtn = document.getElementById('recycle-permanent-delete-selected-btn');
+    
+    selectBtn.classList.remove('active');
+    selectAllBtn.style.display = 'none';
+    restoreBtn.style.display = 'none';
+    deleteBtn.style.display = 'none';
+  } catch (err) {
+    console.error('Error restoring items:', err);
+    alert('Error restoring items');
+  }
+}
+
+window.permanentDeleteSelectedItems = async function() {
+  if (selectedRecycleItems.size === 0) return;
+  if (!confirm('Are you sure you want to permanently delete these items? This cannot be undone.')) return;
+  
+  try {
+    const quizIds = Array.from(selectedRecycleItems).filter(id => deletedItems.find(item => item.id === id && item.type === 'quiz')).map(Number);
+    const studentIds = Array.from(selectedRecycleItems).filter(id => deletedItems.find(item => item.id === id && item.type === 'student')).map(Number);
+    
+    if (quizIds.length > 0) {
+      await ipcRenderer.invoke('db:permanentDeleteQuizzes', quizIds);
+    }
+    
+    for (const id of studentIds) {
+      await ipcRenderer.invoke('db:permanentDeleteStudent', id);
+    }
+    
+    selectedRecycleItems.clear();
+    isSelectModeRecycle = false;
+    loadDeletedItems();
+    
+    const selectBtn = document.getElementById('recycle-select-btn');
+    const selectAllBtn = document.getElementById('recycle-select-all-btn');
+    const restoreBtn = document.getElementById('recycle-restore-selected-btn');
+    const deleteBtn = document.getElementById('recycle-permanent-delete-selected-btn');
+    
+    selectBtn.classList.remove('active');
+    selectAllBtn.style.display = 'none';
+    restoreBtn.style.display = 'none';
+    deleteBtn.style.display = 'none';
+  } catch (err) {
+    console.error('Error deleting items:', err);
+    alert('Error deleting items');
+  }
+}
+
+// Update deleteQuiz and deleteStudent to use soft delete
+async function deleteQuiz(id) {
+  if (!confirm('Are you sure you want to delete this quiz?')) return;
+  await ipcRenderer.invoke('db:deleteQuiz', id);
+  loadQuizzes();
+}
+
+// Update deleteSelectedQuizzes
+window.deleteSelectedQuizzes = async function() {
+  if (selectedQuizzes.size === 0) return;
+  if (!confirm('Are you sure you want to delete these quizzes?')) return;
+  
+  const ids = Array.from(selectedQuizzes).map(Number);
+  await ipcRenderer.invoke('db:deleteQuizzes', ids);
+  
+  selectedQuizzes.clear();
+  isSelectModeDashboard = false;
+  document.getElementById('dashboard-select-btn').classList.remove('active');
+  document.getElementById('dashboard-select-all-btn').style.display = 'none';
+  document.getElementById('dashboard-delete-selected-btn').style.display = 'none';
+  
+  loadQuizzes();
 }
 
 // Start

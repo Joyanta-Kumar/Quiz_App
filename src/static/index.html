@@ -10,39 +10,97 @@
 <body>
   <div class="app-container">
     
-    <!-- Join View -->
-    <main id="view-join" class="view active center-view">
+    <!-- Login View -->
+    <main id="view-login" class="view active center-view">
       <div class="glass-card">
         <div class="logo center-text">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="primary-icon"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
           <h2>QuizMaster Student</h2>
         </div>
-        <p class="subtitle center-text">Enter your details to join the session</p>
+        <p class="subtitle center-text">Login to your account</p>
         
-        <form id="join-form" class="mt-4">
-          <div class="form-group">
-            <label>Session Code</label>
-            <input type="text" id="join-code" required>
-          </div>
+        <form id="login-form" class="mt-4">
           <div class="form-group">
             <label>Registration Number</label>
-            <input type="text" id="join-registration-number" required placeholder="e.g., 2022-1-10-001">
+            <input type="text" id="login-registration-number" required placeholder="e.g., 2022-1-10-001">
+          </div>
+          <div class="form-group">
+            <label>Session Year</label>
+            <input type="text" id="login-session-year" required placeholder="e.g., 2023-2024">
+          </div>
+          <button type="submit" class="btn btn-primary w-100 mt-2" id="login-btn">Login</button>
+        </form>
+        <div id="login-error" class="error-msg"></div>
+        <div class="mt-4 center-text">
+          <p class="subtitle">Don't have an account?</p>
+          <button class="btn btn-secondary w-100 mt-2" id="go-to-signup-btn">Sign Up</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- Sign Up View -->
+    <main id="view-signup" class="view center-view">
+      <div class="glass-card">
+        <div class="logo center-text">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="primary-icon"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+          <h2>Create Account</h2>
+        </div>
+        <p class="subtitle center-text">Sign up to get started</p>
+        
+        <form id="signup-form" class="mt-4">
+          <div class="form-group">
+            <label>Registration Number</label>
+            <input type="text" id="signup-registration-number" required placeholder="e.g., 2022-1-10-001">
           </div>
           <div class="form-group">
             <label>Roll Number</label>
-            <input type="text" id="join-roll" required placeholder="e.g., 101">
+            <input type="text" id="signup-roll-number" required placeholder="e.g., 101">
           </div>
           <div class="form-group">
             <label>Full Name</label>
-            <input type="text" id="join-name" required placeholder="John Doe">
+            <input type="text" id="signup-full-name" required placeholder="John Doe">
           </div>
           <div class="form-group">
             <label>Semester</label>
-            <input type="text" id="join-semester" required placeholder="e.g., 2nd Semester">
+            <input type="text" id="signup-semester" required placeholder="e.g., 2nd Semester">
           </div>
-          <button type="submit" class="btn btn-primary w-100 mt-2" id="join-btn">Join Session</button>
+          <div class="form-group">
+            <label>Session Year</label>
+            <input type="text" id="signup-session-year" required placeholder="e.g., 2023-2024">
+          </div>
+          <div class="form-group">
+            <label>Department</label>
+            <input type="text" id="signup-department" required placeholder="e.g., CSE">
+          </div>
+          <div class="form-group">
+            <label>Batch</label>
+            <input type="text" id="signup-batch" required placeholder="e.g., 6">
+          </div>
+          <button type="submit" class="btn btn-primary w-100 mt-2" id="signup-btn">Sign Up</button>
         </form>
+        <div id="signup-error" class="error-msg"></div>
+        <div class="mt-4 center-text">
+          <p class="subtitle">Already have an account?</p>
+          <button class="btn btn-secondary w-100 mt-2" id="go-to-login-btn">Login</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- Join View -->
+    <main id="view-join" class="view center-view">
+      <div class="glass-card">
+        <div class="logo center-text">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="primary-icon"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+          <h2>Join Quiz</h2>
+        </div>
+        <p class="subtitle center-text" id="student-greeting">Welcome back, John!</p>
+        <p class="subtitle center-text" id="student-info-display">Roll: 101 | Semester: 2nd Semester</p>
+        
         <div id="join-error" class="error-msg"></div>
+        <div class="mt-4">
+          <button type="button" class="btn btn-primary w-100 mt-2" id="join-btn">Join Session</button>
+          <button class="btn btn-secondary w-100 mt-2" id="logout-btn">Logout</button>
+        </div>
       </div>
     </main>
 
@@ -88,6 +146,26 @@
         <div class="score-box mt-4">
           <span class="score-label">Your Score</span>
           <h1 id="final-score">-</h1>
+        </div>
+        <div class="mt-4">
+          <button class="btn btn-primary w-100 mt-2" id="view-answers-btn" style="display: none;">View Answers</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- Answers View -->
+    <main id="view-answers" class="view quiz-layout">
+      <header class="quiz-header glass-header">
+        <div>
+          <h2>Quiz Answers</h2>
+        </div>
+        <div>
+          <button class="btn btn-secondary" id="go-back-to-result-btn">Back to Result</button>
+        </div>
+      </header>
+      <div class="quiz-content">
+        <div id="answers-container" class="questions-container">
+          <!-- Populated via JS -->
         </div>
       </div>
     </main>
