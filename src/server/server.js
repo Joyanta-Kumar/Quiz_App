@@ -34,23 +34,13 @@ async function startServer(port = 3000) {
     res.sendFile(path.join(staticPath, 'index.html'));
   });
 
-  // Student Auth APIs
-  app.post('/api/students/signup', async (req, res) => {
+  // Student Auth API
+  app.get('/api/students/sessions', async (req, res) => {
     try {
-      const { registrationNumber, rollNumber, fullName, semester, sessionYear, department, batch } = req.body;
-      
-      if (!registrationNumber || !rollNumber || !fullName || !semester || !sessionYear || !department || !batch) {
-        return res.status(400).json({ error: 'All fields are required' });
-      }
-
-      const id = await dbApi.createStudent(registrationNumber, rollNumber, fullName, semester, sessionYear, department, batch);
-      res.json({ id, registrationNumber, rollNumber, fullName, semester, sessionYear, department, batch });
+      const sessions = await dbApi.getUniqueSessionYears();
+      res.json(sessions);
     } catch (err) {
-      if (err.message.includes('UNIQUE constraint failed')) {
-        res.status(400).json({ error: 'Student with this registration number already exists' });
-      } else {
-        res.status(500).json({ error: err.message });
-      }
+      res.status(500).json({ error: err.message });
     }
   });
 
@@ -440,22 +430,6 @@ async function startServer(port = 3000) {
             // Validate input
             if (!data.payload || !data.payload.registrationNumber || !data.payload.roll || !data.payload.name) {
               ws.send(JSON.stringify({ type: 'server:join_rejected', message: 'Invalid student information.' }));
-              break;
-            }
-            
-            // Check if student is verified
-            try {
-              // Get student from DB using registration number
-              const students = await dbApi.getAllStudents();
-              const student = students.find(s => s.registration_number === data.payload.registrationNumber);
-              
-              if (!student || !student.verified) {
-                ws.send(JSON.stringify({ type: 'server:join_rejected', message: 'Your account is not verified. Please contact your teacher.' }));
-                break;
-              }
-            } catch (err) {
-              console.error('Error checking student verification:', err);
-              ws.send(JSON.stringify({ type: 'server:join_rejected', message: 'Error verifying your account.' }));
               break;
             }
             

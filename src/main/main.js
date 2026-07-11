@@ -116,8 +116,16 @@ app.whenReady().then(async () => {
       return await dbApi.getAllStudents();
     });
 
+    ipcMain.handle('db:createStudents', async (_, students) => {
+      return await dbApi.createStudents(students);
+    });
+
     ipcMain.handle('db:deleteStudent', async (_, id) => {
       return await dbApi.softDeleteStudent(id);
+    });
+
+    ipcMain.handle('db:deleteStudentsByGroup', async (_, dept, batch, sessionYear) => {
+      return await dbApi.softDeleteStudentsByGroup(dept, batch, sessionYear);
     });
     
     ipcMain.handle('db:getDeletedItems', async () => {
@@ -146,10 +154,6 @@ app.whenReady().then(async () => {
     
     ipcMain.handle('db:permanentDeleteStudent', async (_, id) => {
       return await dbApi.permanentDeleteStudent(id);
-    });
-
-    ipcMain.handle('db:verifyStudent', async (_, id) => {
-      return await dbApi.verifyStudent(id);
     });
 
     ipcMain.handle('db:getQuestionsByQuiz', async (_, quizId) => {

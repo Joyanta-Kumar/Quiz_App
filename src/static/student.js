@@ -17,22 +17,17 @@ let serverAddress = null;
 // DOM Elements
 const views = document.querySelectorAll('.view');
 const loginForm = document.getElementById('login-form');
-const signupForm = document.getElementById('signup-form');
 const joinBtn = document.getElementById('join-btn');
 const loginError = document.getElementById('login-error');
-const signupError = document.getElementById('signup-error');
 const joinError = document.getElementById('join-error');
 const quizTitleEl = document.getElementById('quiz-title');
 const studentInfoEl = document.getElementById('student-info');
 const studentGreetingEl = document.getElementById('student-greeting');
-const studentInfoDisplayEl = document.getElementById('student-info-display');
 const timerEl = document.getElementById('timer');
 const timerBox = document.querySelector('.timer-box');
 const questionsContainer = document.getElementById('questions-container');
 const submitQuizBtn = document.getElementById('submit-quiz-btn');
 const finalScoreEl = document.getElementById('final-score');
-const goToSignupBtn = document.getElementById('go-to-signup-btn');
-const goToLoginBtn = document.getElementById('go-to-login-btn');
 const logoutBtn = document.getElementById('logout-btn');
 
 // Helper function to get API base URL
@@ -52,6 +47,24 @@ function getWsUrl() {
   return `${protocol}//${window.location.host}`;
 }
 
+// Fetch unique session years and populate dropdown
+async function loadSessionYears() {
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/api/students/sessions`);
+    const sessions = await res.json();
+    const select = document.getElementById('login-session-year');
+    select.innerHTML = '<option value="">Select session...</option>';
+    sessions.forEach(session => {
+      const option = document.createElement('option');
+      option.value = session;
+      option.textContent = session;
+      select.appendChild(option);
+    });
+  } catch (err) {
+    console.error('Failed to load session years:', err);
+  }
+}
+
 // Init
 function init() {
   // Check if server address is stored in localStorage (for backward compatibility)
@@ -59,6 +72,9 @@ function init() {
   if (storedServerAddress) {
     serverAddress = storedServerAddress;
   }
+  
+  // Load session years when login view is shown
+  loadSessionYears();
   
   // Check if student is logged in from localStorage
   const storedStudent = localStorage.getItem('quizmaster-student');
@@ -75,64 +91,22 @@ function switchView(viewId) {
 }
 
 function populateStudentInfo() {
-  studentGreetingEl.textContent = `Welcome back, ${currentStudent.full_name}!`;
-  const infoParts = [`Roll: ${currentStudent.roll_number}`, `Semester: ${currentStudent.semester}`];
-  if (currentStudent.department) infoParts.push(`Dept: ${currentStudent.department}`);
-  if (currentStudent.batch) infoParts.push(`Batch: ${currentStudent.batch}`);
-  studentInfoDisplayEl.textContent = infoParts.join(' | ');
+  studentGreetingEl.textContent = `Welcome, ${currentStudent.full_name}!`;
 }
 
 // View Switching
-goToSignupBtn.addEventListener('click', () => {
-  switchView('signup');
-  signupError.textContent = '';
-});
-
-goToLoginBtn.addEventListener('click', () => {
-  switchView('login');
-  loginError.textContent = '';
-});
-
 logoutBtn.addEventListener('click', () => {
   currentStudent = null;
   localStorage.removeItem('quizmaster-student');
   switchView('login');
   loginError.textContent = '';
+  loadSessionYears(); // Reload session years in case new ones were added
 });
 
-// Sign Up Flow
-signupForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  
-  const registrationNumber = document.getElementById('signup-registration-number').value.trim();
-  const rollNumber = document.getElementById('signup-roll-number').value.trim();
-  const fullName = document.getElementById('signup-full-name').value.trim();
-  const semester = document.getElementById('signup-semester').value.trim();
-  const sessionYear = document.getElementById('signup-session-year').value.trim();
-  const department = document.getElementById('signup-department').value.trim();
-  const batch = document.getElementById('signup-batch').value.trim();
-  
-  try {
-    const res = await fetch(`${getApiBaseUrl()}/api/students/signup`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ registrationNumber, rollNumber, fullName, semester, sessionYear, department, batch })
-    });
-    
-    const data = await res.json();
-    
-    if (res.ok) {
-      currentStudent = data;
-      localStorage.setItem('quizmaster-student', JSON.stringify(currentStudent));
-      populateStudentInfo();
-      switchView('join');
-    } else {
-      signupError.textContent = data.error || 'Failed to sign up';
-    }
-  } catch (err) {
-    signupError.textContent = 'Server connection error';
-  }
-});
+// Helper: Normalize registration number (remove hyphens, trim whitespace, lowercase)
+const normalizeRegNo = (regNo) => {
+  return String(regNo || '').replace(/-/g, '').trim().toLowerCase();
+};
 
 // Login Flow
 loginForm.addEventListener('submit', async (e) => {
@@ -147,7 +121,7 @@ loginForm.addEventListener('submit', async (e) => {
     const res = await fetch(`${getApiBaseUrl()}/api/students/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ registrationNumber, sessionYear })
+      body: JSON.stringify({ registrationNumber, sessionYear }) // We send original to server, server normalizes
     });
     const data = await res.json();
 

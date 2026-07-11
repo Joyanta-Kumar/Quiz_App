@@ -113,6 +113,17 @@ async function init() {
   loadQuizzes();
   setupNavigation();
   setupQuizBuilder();
+  
+  // Add CSV import event listener
+  const csvInput = document.getElementById('student-csv-input');
+  if (csvInput) {
+    csvInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        importStudentsCSV(e.target.files[0]);
+        e.target.value = '';
+      }
+    });
+  }
 }
 
 // Toggle server
@@ -216,18 +227,33 @@ async function loadStudents() {
   
   allStudents = await ipcRenderer.invoke('db:getAllStudents');
   
+  // Sanitize helper
+  const sanitize = (text) => {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  };
+  
+  let html = `
+    <header>
+      <h1>Registered Students</h1>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn btn-primary" id="import-csv-btn" onclick="document.getElementById('student-csv-input').click()">
+          Import CSV
+        </button>
+      </div>
+    </header>
+  `;
+  
   if (allStudents.length === 0) {
-    container.innerHTML = '<p class="text-muted">No students registered yet.</p>';
+    html += '<p class="text-muted">No students registered yet.</p>';
+    container.innerHTML = html;
     return;
   }
   
-  // Separate unverified and verified students
-  const unverifiedStudents = allStudents.filter(s => !s.verified);
-  const verifiedStudents = allStudents.filter(s => s.verified);
-  
-  // Group verified students by department + batch + session
+  // Group all students by department + batch + session
   const grouped = {};
-  verifiedStudents.forEach(student => {
+  allStudents.forEach(student => {
     const key = `${student.department || 'Uncategorized'}-${student.batch || 'Uncategorized'}-${student.session_year || 'Uncategorized'}`;
     if (!grouped[key]) {
       grouped[key] = {
@@ -240,69 +266,11 @@ async function loadStudents() {
     grouped[key].students.push(student);
   });
   
-  // Sanitize helper
-  const sanitize = (text) => {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  };
-  
-  let html = '';
-  
-  // Unverified students section
-  if (unverifiedStudents.length > 0) {
-    html += `
-      <div style="margin-bottom: 24px;">
-        <h2 style="margin-bottom: 16px; color: var(--danger);">Unverified Students (${unverifiedStudents.length})</h2>
-        <div class="table-container">
-          <table class="submissions-table">
-            <thead>
-              <tr>
-                <th>Reg No</th>
-                <th>Roll</th>
-                <th>Name</th>
-                <th>Semester</th>
-                <th>Dept</th>
-                <th>Batch</th>
-                <th>Session</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${unverifiedStudents.sort((a,b) => a.full_name.localeCompare(b.full_name)).map(student => `
-                <tr>
-                  <td>${sanitize(student.registration_number || 'N/A')}</td>
-                  <td>${sanitize(student.roll_number || 'N/A')}</td>
-                  <td>${sanitize(student.full_name || 'N/A')}</td>
-                  <td>${sanitize(student.semester || 'N/A')}</td>
-                  <td>${sanitize(student.department || 'N/A')}</td>
-                  <td>${sanitize(student.batch || 'N/A')}</td>
-                  <td>${sanitize(student.session_year || 'N/A')}</td>
-                  <td style="display: flex; gap: 8px;">
-                    <button class="btn btn-success" onclick="window.verifyStudent(${student.id})" style="padding: 4px 8px;">Verify</button>
-                    <button class="btn btn-danger" onclick="window.deleteStudent(${student.id})" style="padding: 4px 8px;">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="3 6 5 6 21 6"></polyline>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                        <line x1="10" y1="11" x2="10" y2="17"></line>
-                        <line x1="14" y1="11" x2="14" y2="17"></line>
-                      </svg>
-                    </button>
-                  </td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    `;
-  }
-  
-  // Verified groups section
+  // Groups section
   if (Object.keys(grouped).length > 0) {
     html += `
       <div>
-        <h2 style="margin-bottom: 16px;">Verified Groups</h2>
+        <h2 style="margin-bottom: 16px;">Student Groups</h2>
         <div id="students-grid" class="quizzes-grid"></div>
       </div>
     `;
@@ -310,7 +278,7 @@ async function loadStudents() {
   
   container.innerHTML = html;
   
-  // Render verified groups
+  // Render groups
   if (Object.keys(grouped).length > 0) {
     const grid = document.getElementById('students-grid');
     Object.keys(grouped).sort().forEach(key => {
@@ -325,12 +293,287 @@ async function loadStudents() {
           <p>${group.students.length} student${group.students.length !== 1 ? 's' : ''}</p>
           <div class="card-actions">
             <button class="btn btn-primary" onclick="window.viewBatchStudents('${key}')">View Students</button>
+            <button class="btn btn-danger" onclick="window.deleteStudentsByGroup('${sanitize(group.dept)}', '${sanitize(group.batch)}', '${sanitize(group.session)}')">Delete Group</button>
           </div>
         </div>
       `;
       
       grid.appendChild(card);
     });
+  }
+}
+
+// CSV Parser function
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length === 0) return [];
+  
+  // Parse headers (keep original case for matching later)
+  const headers = parseCSVLine(lines[0]).map(h => h.trim());
+  const data = [];
+  
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i].trim() === '') continue;
+    const values = parseCSVLine(lines[i]);
+    const row = {};
+    headers.forEach((header, index) => {
+      row[header] = values[index] || '';
+    });
+    data.push(row);
+  }
+  
+  return data;
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current);
+  
+  return result;
+}
+
+let currentCSVData = [];
+let currentCSVHeaders = [];
+
+// CSV Import function - open preview modal
+async function importStudentsCSV(file) {
+  const reader = new FileReader();
+  
+  reader.onload = async (e) => {
+    try {
+      const csvText = e.target.result;
+      const lines = csvText.trim().split(/\r?\n/);
+      currentCSVHeaders = parseCSVLine(lines[0]).map(h => h.trim());
+      currentCSVData = parseCSV(csvText);
+      
+      if (currentCSVData.length === 0) {
+        alert('No data found in CSV file!');
+        return;
+      }
+      
+      openCSVPreviewModal();
+    } catch (err) {
+      console.error('Import error:', err);
+      alert('Failed to import students: ' + err.message);
+    }
+  };
+  
+  reader.onerror = () => {
+    alert('Failed to read file!');
+  };
+  
+  reader.readAsText(file);
+}
+
+// Helper to match column name with patterns
+function findMatchingColumn(headers, patterns) {
+  const normalizedHeaders = headers.map(h => h.toLowerCase().trim());
+  
+  for (const pattern of patterns) {
+    const index = normalizedHeaders.findIndex(h => 
+      h.includes(pattern.toLowerCase()) || 
+      h === pattern.toLowerCase()
+    );
+    if (index !== -1) return headers[index];
+  }
+  return '--- Use Default ---';
+}
+
+// Open Preview Modal
+function openCSVPreviewModal() {
+  const modal = document.getElementById('csv-preview-modal');
+  
+  // Get dropdown elements
+  const dropdowns = {
+    reg: document.getElementById('csv-map-reg'),
+    roll: document.getElementById('csv-map-roll'),
+    name: document.getElementById('csv-map-name')
+  };
+  
+  // Populate options
+  Object.values(dropdowns).forEach(dropdown => {
+    dropdown.innerHTML = currentCSVHeaders.map(opt => `<option value="${opt}">${opt}</option>`).join('');
+  });
+  
+  // Auto-detect columns (especially for user's exact column names!)
+  dropdowns.reg.value = findMatchingColumn(currentCSVHeaders, ['Reg No', 'Registration', 'Reg No.', 'reg no', 'registration_number', 'registration']);
+  dropdowns.roll.value = findMatchingColumn(currentCSVHeaders, ['Class roll', 'Roll', 'Roll No', 'roll', 'class roll', 'roll_number']);
+  dropdowns.name.value = findMatchingColumn(currentCSVHeaders, ['Name of Students', 'Student Name', 'Name', 'Full Name', 'name of students', 'student name', 'full_name']);
+  
+  // Render preview table (first 10 rows)
+  renderCSVPreviewTable();
+  
+  // Add change listeners to update preview
+  Object.values(dropdowns).forEach(dropdown => {
+    dropdown.addEventListener('change', renderCSVPreviewTable);
+  });
+  ['csv-input-semester', 'csv-input-session', 'csv-input-dept', 'csv-input-batch'].forEach(id => {
+    document.getElementById(id).addEventListener('input', renderCSVPreviewTable);
+  });
+  
+  // Add import button listener
+  document.getElementById('csv-import-btn').onclick = importStudentsFromPreview;
+  
+  modal.classList.add('active');
+}
+
+// Render Preview Table
+function renderCSVPreviewTable() {
+  const table = document.getElementById('csv-preview-table');
+  
+  // Get column mappings
+  const mappings = {
+    reg: document.getElementById('csv-map-reg').value,
+    roll: document.getElementById('csv-map-roll').value,
+    name: document.getElementById('csv-map-name').value
+  };
+  
+  // Get input values (apply to all)
+  const inputValues = {
+    semester: document.getElementById('csv-input-semester').value,
+    session: document.getElementById('csv-input-session').value,
+    dept: document.getElementById('csv-input-dept').value,
+    batch: document.getElementById('csv-input-batch').value
+  };
+  
+  // Build table header
+  let html = `
+    <thead>
+      <tr>
+        <th>Reg No</th>
+        <th>Class Roll</th>
+        <th>Name</th>
+        <th>Semester</th>
+        <th>Session</th>
+        <th>Department</th>
+        <th>Batch</th>
+      </tr>
+    </thead>
+    <tbody>
+  `;
+  
+  // Add first 10 rows
+  currentCSVData.slice(0,10).forEach(row => {
+    html += `
+      <tr>
+        <td>${row[mappings.reg] || ''}</td>
+        <td>${row[mappings.roll] || ''}</td>
+        <td>${row[mappings.name] || ''}</td>
+        <td>${inputValues.semester}</td>
+        <td>${inputValues.session}</td>
+        <td>${inputValues.dept}</td>
+        <td>${inputValues.batch}</td>
+      </tr>
+    `;
+  });
+  
+  html += '</tbody>';
+  table.innerHTML = html;
+}
+
+// Close Preview Modal
+window.closeCSVPreviewModal = function() {
+  document.getElementById('csv-preview-modal').classList.remove('active');
+  currentCSVData = [];
+  currentCSVHeaders = [];
+  // Clear inputs for next time
+  document.getElementById('csv-input-semester').value = '';
+  document.getElementById('csv-input-session').value = '';
+  document.getElementById('csv-input-dept').value = '';
+  document.getElementById('csv-input-batch').value = '';
+};
+
+// Import from Preview
+async function importStudentsFromPreview() {
+  // Get column mappings
+  const mappings = {
+    reg: document.getElementById('csv-map-reg').value,
+    roll: document.getElementById('csv-map-roll').value,
+    name: document.getElementById('csv-map-name').value
+  };
+  
+  // Get input values
+  const inputValues = {
+    semester: document.getElementById('csv-input-semester').value,
+    session: document.getElementById('csv-input-session').value,
+    dept: document.getElementById('csv-input-dept').value,
+    batch: document.getElementById('csv-input-batch').value
+  };
+  
+  // Validate required fields
+  if (!inputValues.semester || !inputValues.session || !inputValues.dept || !inputValues.batch) {
+    alert('Please fill in all the "Additional Info" fields!');
+    return;
+  }
+  
+  // Build students array
+  const students = currentCSVData.map(row => {
+    return {
+      registration_number: String(row[mappings.reg] || ''),
+      roll_number: String(row[mappings.roll] || ''),
+      full_name: String(row[mappings.name] || ''),
+      semester: inputValues.semester,
+      session_year: inputValues.session,
+      department: inputValues.dept,
+      batch: inputValues.batch
+    };
+  }).filter(student => 
+    student.registration_number && 
+    student.roll_number && 
+    student.full_name
+  );
+  
+  if (students.length === 0) {
+    alert('No valid students found! Please ensure you have mapped all 3 CSV columns!');
+    return;
+  }
+  
+  try {
+    const result = await ipcRenderer.invoke('db:createStudents', students);
+    
+    let message = '';
+    if (result.inserted > 0) {
+      message += `✅ Successfully imported ${result.inserted} student(s)!\n`;
+    }
+    if (result.skipped > 0) {
+      message += `⚠️ Skipped ${result.skipped} student(s) (already registered with these registration numbers)\n`;
+    }
+    if (result.errors.length > 0) {
+      message += `❌ ${result.errors.length} error(s) occurred!\n`;
+      result.errors.forEach(err => {
+        message += `  - ${err.student.full_name || err.student.registration_number}: ${err.error}\n`;
+      });
+    }
+    if (message === '') {
+      message = 'No students were imported.';
+    }
+    alert(message);
+    
+    // Close modal & reload students
+    closeCSVPreviewModal();
+    loadStudents();
+  } catch (err) {
+    console.error('Import error:', err);
+    alert('Failed to import students: ' + err.message);
   }
 }
 
@@ -347,7 +590,14 @@ window.viewBatchStudents = function(key) {
     return acc;
   }, { dept: '', batch: '', session: '', students: [] });
   
-  // Sanitize
+  // Sort students by roll number ascending
+  group.students.sort((a, b) => {
+    const rollA = parseFloat(a.roll_number);
+    const rollB = parseFloat(b.roll_number);
+    if (!isNaN(rollA) && !isNaN(rollB)) return rollA - rollB;
+    return String(a.roll_number || '').localeCompare(String(b.roll_number || ''));
+  });
+  
   const sanitize = (text) => {
     const div = document.createElement('div');
     div.textContent = text;
@@ -355,14 +605,23 @@ window.viewBatchStudents = function(key) {
   };
   
   container.innerHTML = `
-    <button class="btn btn-secondary" onclick="loadStudents()" style="margin-bottom: 16px;">
-      ← Back to Batches
-    </button>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <button class="btn btn-secondary" onclick="loadStudents()">← Back to Batches</button>
+      <button class="btn btn-primary" id="add-student-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+        Add Student
+      </button>
+    </div>
     <h2 style="margin-bottom: 16px;">${sanitize(group.dept)} - Batch ${sanitize(group.batch)} (Session ${sanitize(group.session)})</h2>
+    
     <div class="table-container">
       <table class="submissions-table">
         <thead>
           <tr>
+            <th>Sl No</th>
             <th>Reg No</th>
             <th>Roll</th>
             <th>Name</th>
@@ -371,8 +630,9 @@ window.viewBatchStudents = function(key) {
           </tr>
         </thead>
         <tbody>
-          ${group.students.sort((a,b) => a.full_name.localeCompare(b.full_name)).map(student => `
+          ${group.students.map((student, index) => `
             <tr>
+              <td>${index + 1}</td>
               <td>${sanitize(student.registration_number || 'N/A')}</td>
               <td>${sanitize(student.roll_number || 'N/A')}</td>
               <td>${sanitize(student.full_name || 'N/A')}</td>
@@ -392,19 +652,82 @@ window.viewBatchStudents = function(key) {
         </tbody>
       </table>
     </div>
+    
+    <!-- Add Student Modal -->
+    <div id="add-student-modal" class="modal" style="align-items: flex-start; padding-top: 40px;">
+      <div class="modal-content glass-panel">
+        <h2>Add New Student</h2>
+        <form id="add-student-form">
+          <div class="form-group">
+            <label>Registration Number</label>
+            <input type="text" id="new-student-reg" required placeholder="Reg No">
+          </div>
+          <div class="form-group">
+            <label>Roll Number</label>
+            <input type="text" id="new-student-roll" required placeholder="Roll">
+          </div>
+          <div class="form-group">
+            <label>Student Name</label>
+            <input type="text" id="new-student-name" required placeholder="Name">
+          </div>
+          <div class="form-group">
+            <label>Semester</label>
+            <input type="text" id="new-student-semester" required placeholder="Semester" value="${sanitize(group.students[0]?.semester || '')}">
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" id="cancel-add-student">Cancel</button>
+            <button type="submit" class="btn btn-primary">Add Student</button>
+          </div>
+        </form>
+      </div>
+    </div>
   `;
-};
-
-window.verifyStudent = async function(id) {
-  if (confirm('Are you sure you want to verify this student?')) {
-    await ipcRenderer.invoke('db:verifyStudent', id);
-    loadStudents();
-  }
+  
+  // Modal handling
+  const modal = document.getElementById('add-student-modal');
+  const addBtn = document.getElementById('add-student-btn');
+  const cancelBtn = document.getElementById('cancel-add-student');
+  const form = document.getElementById('add-student-form');
+  
+  addBtn.addEventListener('click', () => modal.classList.add('active'));
+  cancelBtn.addEventListener('click', () => modal.classList.remove('active'));
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('active'); });
+  
+  // Form submission
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const regNo = document.getElementById('new-student-reg').value.trim();
+    const rollNo = document.getElementById('new-student-roll').value.trim();
+    const name = document.getElementById('new-student-name').value.trim();
+    const semester = document.getElementById('new-student-semester').value.trim();
+    
+    try {
+      const result = await ipcRenderer.invoke('db:createStudent', regNo, rollNo, name, semester, group.session, group.dept, group.batch);
+      if (result.inserted) {
+        alert('Student added successfully!');
+        modal.classList.remove('active');
+        await loadStudents();
+        window.viewBatchStudents(key);
+      } else if (result.skipped) {
+        alert('Student with this registration number already exists!');
+      }
+    } catch (err) {
+      console.error('Failed to add student:', err);
+      alert('Failed to add student: ' + (err.message || 'Unknown error'));
+    }
+  });
 };
 
 window.deleteStudent = async function(id) {
   if (confirm('Are you sure you want to delete this student?')) {
     await ipcRenderer.invoke('db:deleteStudent', id);
+    loadStudents();
+  }
+};
+
+window.deleteStudentsByGroup = async function(dept, batch, sessionYear) {
+  if (confirm(`Are you sure you want to delete all students in ${dept} - Batch ${batch} (Session ${sessionYear})?`)) {
+    await ipcRenderer.invoke('db:deleteStudentsByGroup', dept, batch, sessionYear);
     loadStudents();
   }
 };

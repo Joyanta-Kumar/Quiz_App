@@ -26,63 +26,13 @@
           </div>
           <div class="form-group">
             <label>Session Year</label>
-            <input type="text" id="login-session-year" required placeholder="e.g., 2023-2024">
+            <select id="login-session-year" required>
+              <option value="">Select session...</option>
+            </select>
           </div>
           <button type="submit" class="btn btn-primary w-100 mt-2" id="login-btn">Login</button>
         </form>
         <div id="login-error" class="error-msg"></div>
-        <div class="mt-4 center-text">
-          <p class="subtitle">Don't have an account?</p>
-          <button class="btn btn-secondary w-100 mt-2" id="go-to-signup-btn">Sign Up</button>
-        </div>
-      </div>
-    </main>
-
-    <!-- Sign Up View -->
-    <main id="view-signup" class="view center-view">
-      <div class="glass-card">
-        <div class="logo center-text">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="primary-icon"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
-          <h2>Create Account</h2>
-        </div>
-        <p class="subtitle center-text">Sign up to get started</p>
-        
-        <form id="signup-form" class="mt-4">
-          <div class="form-group">
-            <label>Registration Number</label>
-            <input type="text" id="signup-registration-number" required placeholder="e.g., 2022-1-10-001">
-          </div>
-          <div class="form-group">
-            <label>Roll Number</label>
-            <input type="text" id="signup-roll-number" required placeholder="e.g., 101">
-          </div>
-          <div class="form-group">
-            <label>Full Name</label>
-            <input type="text" id="signup-full-name" required placeholder="John Doe">
-          </div>
-          <div class="form-group">
-            <label>Semester</label>
-            <input type="text" id="signup-semester" required placeholder="e.g., 2nd Semester">
-          </div>
-          <div class="form-group">
-            <label>Session Year</label>
-            <input type="text" id="signup-session-year" required placeholder="e.g., 2023-2024">
-          </div>
-          <div class="form-group">
-            <label>Department</label>
-            <input type="text" id="signup-department" required placeholder="e.g., CSE">
-          </div>
-          <div class="form-group">
-            <label>Batch</label>
-            <input type="text" id="signup-batch" required placeholder="e.g., 6">
-          </div>
-          <button type="submit" class="btn btn-primary w-100 mt-2" id="signup-btn">Sign Up</button>
-        </form>
-        <div id="signup-error" class="error-msg"></div>
-        <div class="mt-4 center-text">
-          <p class="subtitle">Already have an account?</p>
-          <button class="btn btn-secondary w-100 mt-2" id="go-to-login-btn">Login</button>
-        </div>
       </div>
     </main>
 
@@ -91,10 +41,8 @@
       <div class="glass-card">
         <div class="logo center-text">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="primary-icon"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
-          <h2>Join Quiz</h2>
         </div>
-        <p class="subtitle center-text" id="student-greeting">Welcome back, John!</p>
-        <p class="subtitle center-text" id="student-info-display">Roll: 101 | Semester: 2nd Semester</p>
+        <h2 class="center-text" id="student-greeting">Welcome back, John!</h2>
         
         <div id="join-error" class="error-msg"></div>
         <div class="mt-4">

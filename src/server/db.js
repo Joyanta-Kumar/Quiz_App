@@ -14,6 +14,11 @@ const dbPath = path.join(dbDir, 'quiz_system.sqlite');
 
 const db = new sqlite3.Database(dbPath);
 
+// Helper: Normalize registration number (remove hyphens, trim whitespace, lowercase)
+const normalizeRegNo = (regNo) => {
+  return String(regNo || '').replace(/-/g, '').trim().toLowerCase();
+};
+
 // Helper function to check if a column exists in a table
 function columnExists(tableName, columnName) {
   return new Promise((resolve, reject) => {
@@ -93,7 +98,7 @@ async function initDb() {
               session_year TEXT NOT NULL,
               department TEXT NOT NULL,
               batch TEXT NOT NULL,
-              verified INTEGER NOT NULL DEFAULT 0,
+              verified INTEGER NOT NULL DEFAULT 1,
               deleted INTEGER NOT NULL DEFAULT 0
             )`, (err) => {
               if (err) rej(err);
@@ -101,6 +106,14 @@ async function initDb() {
             });
           });
         }
+
+        // Set all existing students to verified
+        await new Promise((res, rej) => {
+          db.run(`UPDATE students SET verified = 1 WHERE verified = 0`, (err) => {
+            if (err) rej(err);
+            else res();
+          });
+        });
 
         // Quizzes table
         await new Promise((res, rej) => {
@@ -279,10 +292,10 @@ const dbApi = {
       let query, params;
       if (hasNameColumn) {
         // If old name column exists, include it in insert to avoid NOT NULL errors
-        query = `INSERT INTO students (registration_number, roll_number, full_name, name, semester, session_year, department, batch, verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`;
+        query = `INSERT INTO students (registration_number, roll_number, full_name, name, semester, session_year, department, batch, verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`;
         params = [registrationNumber, rollNumber, fullName, fullName, semester, sessionYear, department, batch];
       } else {
-        query = `INSERT INTO students (registration_number, roll_number, full_name, semester, session_year, department, batch, verified) VALUES (?, ?, ?, ?, ?, ?, ?, 0)`;
+        query = `INSERT INTO students (registration_number, roll_number, full_name, semester, session_year, department, batch, verified) VALUES (?, ?, ?, ?, ?, ?, ?, 1)`;
         params = [registrationNumber, rollNumber, fullName, semester, sessionYear, department, batch];
       }
       
@@ -292,12 +305,74 @@ const dbApi = {
       });
     });
   },
-  verifyStudent: (id) => {
-    return new Promise((resolve, reject) => {
-      db.run(`UPDATE students SET verified = 1 WHERE id = ?`, [id], function(err) {
-        if (err) reject(err);
-        else resolve(this.changes);
-      });
+
+  createStudents: async (students) => {
+    return new Promise(async (resolve, reject) => {
+      const hasNameColumn = await columnExists('students', 'name');
+      let insertedCount = 0;
+      let skippedCount = 0;
+      let errors = [];
+      let skippedStudents = [];
+      
+      for (const student of students) {
+        const normalizedRegNo = normalizeRegNo(student.registration_number);
+        
+        // First check if a student with this normalized reg no already exists
+        const existingStudent = await new Promise((res, rej) => {
+          const checkQuery = hasNameColumn 
+            ? `SELECT id FROM students WHERE REPLACE(REPLACE(LOWER(registration_number), '-', ''), ' ', '') = ?`
+            : `SELECT id FROM students WHERE REPLACE(REPLACE(LOWER(registration_number), '-', ''), ' ', '') = ?`;
+          db.get(checkQuery, [normalizedRegNo], (err, row) => {
+            if (err) rej(err);
+            else res(row);
+          });
+        });
+        
+        if (existingStudent) {
+          skippedCount++;
+          skippedStudents.push(student);
+          continue;
+        }
+        
+        let query, params;
+        if (hasNameColumn) {
+          query = `INSERT INTO students (registration_number, roll_number, full_name, name, semester, session_year, department, batch, verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`;
+          params = [
+            student.registration_number,
+            student.roll_number,
+            student.full_name,
+            student.full_name,
+            student.semester,
+            student.session_year,
+            student.department,
+            student.batch
+          ];
+        } else {
+          query = `INSERT INTO students (registration_number, roll_number, full_name, semester, session_year, department, batch, verified) VALUES (?, ?, ?, ?, ?, ?, ?, 1)`;
+          params = [
+            student.registration_number,
+            student.roll_number,
+            student.full_name,
+            student.semester,
+            student.session_year,
+            student.department,
+            student.batch
+          ];
+        }
+        
+        await new Promise((res, rej) => {
+          db.run(query, params, function(err) {
+            if (err) {
+              errors.push({ student, error: err.message });
+            } else if (this.changes > 0) {
+              insertedCount++;
+            }
+            res();
+          });
+        });
+      }
+      
+      resolve({ inserted: insertedCount, skipped: skippedCount, skippedStudents, errors });
     });
   },
 
@@ -305,13 +380,14 @@ const dbApi = {
     return new Promise(async (resolve, reject) => {
       // First, check if "name" column exists
       const hasNameColumn = await columnExists('students', 'name');
+      const normalizedInputRegNo = normalizeRegNo(registrationNumber);
       
-      // Build the query
+      // Build the query - we'll normalize stored registration number in SQL
       const query = hasNameColumn 
-        ? `SELECT id, registration_number, roll_number, COALESCE(full_name, name) as full_name, semester, session_year, department, batch, verified FROM students WHERE registration_number = ? AND session_year = ?`
-        : `SELECT * FROM students WHERE registration_number = ? AND session_year = ?`;
+        ? `SELECT id, registration_number, roll_number, COALESCE(full_name, name) as full_name, semester, session_year, department, batch, verified FROM students WHERE REPLACE(REPLACE(LOWER(registration_number), '-', ''), ' ', '') = ? AND session_year = ?`
+        : `SELECT * FROM students WHERE REPLACE(REPLACE(LOWER(registration_number), '-', ''), ' ', '') = ? AND session_year = ?`;
       
-      db.get(query, [registrationNumber, sessionYear], (err, row) => {
+      db.get(query, [normalizedInputRegNo, sessionYear], (err, row) => {
         if (err) reject(err);
         else resolve(row);
       });
@@ -339,6 +415,19 @@ const dbApi = {
         if (err) reject(err);
         else resolve(this.changes);
       });
+    });
+  },
+
+  softDeleteStudentsByGroup: (dept, batch, sessionYear) => {
+    return new Promise((resolve, reject) => {
+      db.run(
+        `UPDATE students SET deleted = 1 WHERE department = ? AND batch = ? AND session_year = ?`,
+        [dept, batch, sessionYear],
+        function(err) {
+          if (err) reject(err);
+          else resolve(this.changes);
+        }
+      );
     });
   },
   
@@ -673,6 +762,15 @@ const dbApi = {
       `, [sessionId], (err, rows) => {
         if (err) reject(err);
         else resolve(rows);
+      });
+    });
+  },
+
+  getUniqueSessionYears: () => {
+    return new Promise((resolve, reject) => {
+      db.all(`SELECT DISTINCT session_year FROM students WHERE deleted = 0 AND session_year IS NOT NULL ORDER BY session_year`, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows.map(r => r.session_year));
       });
     });
   }
