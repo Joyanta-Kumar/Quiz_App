@@ -1717,7 +1717,7 @@ function addQuestionUI() {
       <div style="flex: 1;">
         <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
-            <label style="flex: 1;">Question Text</label>
+            <label style="flex: 1;">Question ${index + 1}</label>
             <div style="display: flex; gap: 6px;">
               <input type="file" class="q-image-input" accept="image/*" style="display: none;">
               <button type="button" class="btn btn-secondary" style="padding: 6px 8px; font-size: 12px; min-width: 32px; min-height: 32px; display: inline-flex; align-items: center; justify-content: center;" onclick="this.closest('.form-group').querySelector('.q-image-input').click()">
@@ -1815,6 +1815,10 @@ function reindexQuestions() {
     radios.forEach(radio => {
       radio.name = `correct-${index}`;
     });
+    const label = item.querySelector('label');
+    if (label) {
+      label.textContent = `Question ${index + 1}`;
+    }
   });
 }
 
