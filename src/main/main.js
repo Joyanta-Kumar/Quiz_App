@@ -93,8 +93,12 @@ app.whenReady().then(async () => {
     });
 
     ipcMain.handle('db:updateQuestion', async (_, id, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image) => {
-      return await dbApi.updateQuestion(id, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image);
-    });
+    return await dbApi.updateQuestion(id, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image);
+  });
+  
+  ipcMain.handle('db:deleteQuestion', async (_, id) => {
+    return await dbApi.deleteQuestion(id);
+  });
     
     ipcMain.handle('db:getSessionsHistory', async () => {
       return await dbApi.getSessionsHistory();

@@ -1270,13 +1270,30 @@ async function loadQuizzes() {
             onclick="event.stopPropagation(); window.toggleQuizSelection(${quiz.id})"
             style="width: 18px; height: 18px; cursor: pointer; margin-top: 4px;">
         ` : ''}
-        <div style="flex: 1;">
-          <h3>${title}</h3>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <h3 style="margin: 0;">${title}</h3>
+            ${!isSelectModeDashboard ? `
+              <div style="display: flex; gap: 8px;">
+                <!-- View Questions (eye icon) -->
+                <button class="quiz-card-icon-btn" title="View Questions" onclick="event.stopPropagation(); openViewQuestionsModal(${quiz.id}, '${title.replace(/'/g, "\\'")}', true)">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                  </svg>
+                </button>
+                <!-- Edit Questions (pencil icon) -->
+                <button class="quiz-card-icon-btn" title="Edit Questions" onclick="event.stopPropagation(); openViewQuestionsModal(${quiz.id}, '${title.replace(/'/g, "\\'")}', false)">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+                  </svg>
+                </button>
+              </div>
+            ` : ''}
+          </div>
           ${detailsHtml}
           ${!isSelectModeDashboard ? `
-            <div class="card-actions">
-              <button class="btn btn-secondary" onclick="openViewQuestionsModal(${quiz.id}, '${title.replace(/'/g, "\\'")}', true)">View Questions</button>
-              <button class="btn btn-secondary" onclick="openViewQuestionsModal(${quiz.id}, '${title.replace(/'/g, "\\'")}', false)">Edit Questions</button>
+            <div class="card-actions" style="margin-top: 8px;">
               <button class="btn btn-primary" onclick="openStartSessionModal(${quiz.id}, '${title.replace(/'/g, "\\'")}')">Start Session</button>
             </div>
           ` : ''}
@@ -1292,6 +1309,7 @@ async function loadQuizzes() {
 let currentEditQuizId = null;
 let currentEditTitle = '';
 let editQuestionImages = {}; // questionId -> base64 data URL or null
+let newQuestionCounter = 0; // Counter for temporary new question IDs
 
 function escapeAttr(str) {
   return String(str == null ? '' : str)
@@ -1309,9 +1327,97 @@ function eqImageBtnHtml(label) {
   </svg> ${label}`;
 }
 
+function addEditQuestionUI() {
+  const body = document.getElementById('view-questions-body');
+  const qid = `new-${++newQuestionCounter}`;
+  const optionLetters = ['a', 'b', 'c', 'd'];
+  
+  const qDiv = document.createElement('div');
+  qDiv.className = 'edit-question-item';
+  qDiv.dataset.qid = qid;
+  
+  const optionsHtml = optionLetters.map(opt => `
+    <div class="option-input" onclick="this.querySelector('input[type=radio]').checked = true;">
+      <input type="radio" name="eq-correct-${qid}" value="${opt}" ${opt === 'a' ? 'checked' : ''}>
+      <input type="text" class="eq-opt-${opt}" placeholder="Option ${opt.toUpperCase()}" autocomplete="off" onclick="event.stopPropagation();">
+    </div>
+  `).join('');
+  
+  qDiv.innerHTML = `
+    <div class="form-group">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+        <label>New Question</label>
+        <button class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;" onclick="window.removeEditQuestion('${qid}')">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            <line x1="10" y1="11" x2="10" y2="17"></line>
+            <line x1="14" y1="11" x2="14" y2="17"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="eq-image-preview" style="margin-bottom: 12px; display: none;"></div>
+      <textarea class="eq-text" placeholder="Question text" autocomplete="off" style="width: 100%; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--panel-border); background: rgba(255,255,255,0.4); font-family: inherit; font-size: inherit; resize: vertical; min-height: 60px;"></textarea>
+    </div>
+    <div style="margin-top: 8px; display: flex; gap: 8px;">
+      <input type="file" class="eq-image-input" accept="image/*" style="display: none;">
+      <button type="button" class="btn btn-secondary eq-image-btn" style="padding: 6px 8px; font-size: 12px;" onclick="this.previousElementSibling.click()">${eqImageBtnHtml('Add Image')}</button>
+    </div>
+    <div class="options-grid" style="margin-top: 12px;">
+      ${optionsHtml}
+    </div>
+  `;
+  
+  // Add image listener for new question
+  const imageInput = qDiv.querySelector('.eq-image-input');
+  let imagePreview = qDiv.querySelector('.eq-image-preview');
+  imageInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        editQuestionImages[qid] = event.target.result;
+        imagePreview.style.display = 'block';
+        imagePreview.innerHTML = `
+          <div style="display: flex; align-items: flex-start; gap: 8px;">
+            <div class="resizable-image-container" style="width: 200px; height: 150px;">
+              <img src="${event.target.result}">
+            </div>
+            <button type="button" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" onclick="window.removeEditQuestionImage('${qid}')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        `;
+        const btnRow = imageInput.parentElement;
+        const imgBtn = btnRow.querySelector('.eq-image-btn');
+        if (imgBtn) imgBtn.innerHTML = eqImageBtnHtml('Change Image');
+        // Add Remove Image button if not present
+        if (!btnRow.querySelector('.eq-remove-btn')) {
+          const removeBtn = document.createElement('button');
+          removeBtn.type = 'button';
+          removeBtn.className = 'btn btn-secondary eq-remove-btn';
+          removeBtn.style.padding = '6px 8px';
+          removeBtn.style.fontSize = '12px';
+          removeBtn.textContent = 'Remove Image';
+          removeBtn.onclick = () => window.removeEditQuestionImage(qid);
+          btnRow.appendChild(removeBtn);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  });
+  
+  body.appendChild(qDiv);
+}
+
 window.openViewQuestionsModal = async function(quizId, title, isReadOnly = false) {
   currentEditQuizId = quizId;
   currentEditTitle = title;
+  newQuestionCounter = 0;
+  deletedQuestions = new Set();
   document.getElementById('view-questions-title').textContent = title + ' - Questions';
   const body = document.getElementById('view-questions-body');
   
@@ -1321,27 +1427,31 @@ window.openViewQuestionsModal = async function(quizId, title, isReadOnly = false
     saveBtn.style.display = isReadOnly ? 'none' : 'inline-block';
   }
   
-  const questions = await ipcRenderer.invoke('db:getQuestionsByQuiz', quizId);
-  
-  if (questions.length === 0) {
-    body.innerHTML = '<p class="text-muted">No questions found for this quiz.</p>';
-    document.getElementById('view-questions-modal').classList.add('active');
-    return;
+  // Add "Add Question" button above the questions (only if not read-only)
+  let addButtonHtml = '';
+  if (!isReadOnly) {
+    addButtonHtml = `
+      <div style="margin-bottom: 16px;">
+        <button class="btn btn-secondary" onclick="window.addEditQuestionUI()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          Add Question
+        </button>
+      </div>
+    `;
   }
+  
+  const questions = await ipcRenderer.invoke('db:getQuestionsByQuiz', quizId);
   
   editQuestionImages = {};
   questions.forEach(q => { editQuestionImages[q.id] = q.image || null; });
   
   const optionLetters = ['a', 'b', 'c', 'd'];
   
-  body.innerHTML = questions.map((q, i) => {
+  body.innerHTML = addButtonHtml + questions.map((q, i) => {
     const optValues = { a: q.opt_a, b: q.opt_b, c: q.opt_c, d: q.opt_d };
-    const imageHtml = q.image
-      ? `<img src="${q.image}" style="max-width:200px; max-height:150px; border-radius:8px;">`
-      : '';
-    const removeBtnHtml = (q.image && !isReadOnly)
-      ? `<button type="button" class="btn btn-secondary eq-remove-btn" style="padding: 6px 8px; font-size: 12px;" onclick="removeEditQuestionImage(${q.id})">Remove Image</button>`
-      : '';
     
     const optionsHtml = optionLetters.map(opt => `
       <div class="option-input" ${isReadOnly ? '' : 'onclick="this.querySelector(\'input[type=radio]\').checked = true;"'}>
@@ -1353,56 +1463,124 @@ window.openViewQuestionsModal = async function(quizId, title, isReadOnly = false
     return `
       <div class="edit-question-item" data-qid="${q.id}">
         <div class="form-group">
-          <label>Question ${i + 1}</label>
-          <input type="text" class="eq-text" value="${escapeAttr(q.text)}" placeholder="Question text" autocomplete="off" ${isReadOnly ? 'disabled' : ''}>
-        </div>
-        <div class="options-grid">
-          ${optionsHtml}
-        </div>
-        <div class="eq-image-preview" style="margin-top: 8px;">
-          ${imageHtml}
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+            <label>Question ${i + 1}</label>
+            ${!isReadOnly ? `
+              <button class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;" onclick="window.removeEditQuestion(${q.id})">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  <line x1="10" y1="11" x2="10" y2="17"></line>
+                  <line x1="14" y1="11" x2="14" y2="17"></line>
+                </svg>
+              </button>
+            ` : ''}
+          </div>
+          ${q.image ? `
+            <div class="eq-image-preview" style="margin-bottom: 12px;">
+              <div style="display: flex; align-items: flex-start; gap: 8px;">
+                <div class="resizable-image-container" style="width: 200px; height: 150px;">
+                  <img src="${q.image}">
+                </div>
+                ${!isReadOnly ? `
+                  <button type="button" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" onclick="window.removeEditQuestionImage(${q.id})">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+          ` : ''}
+          ${isReadOnly ? `
+            <div style="word-wrap: break-word; overflow-wrap: break-word; padding: 8px 0; color: var(--text-primary); font-weight: 500;">${escapeAttr(q.text)}</div>
+          ` : `
+            <textarea class="eq-text" placeholder="Question text" autocomplete="off" style="width: 100%; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--panel-border); background: rgba(255,255,255,0.4); font-family: inherit; font-size: inherit; resize: vertical; min-height: 60px;">${escapeAttr(q.text)}</textarea>
+          `}
         </div>
         ${isReadOnly ? '' : `
           <div style="margin-top: 8px; display: flex; gap: 8px;">
             <input type="file" class="eq-image-input" accept="image/*" style="display: none;">
             <button type="button" class="btn btn-secondary eq-image-btn" style="padding: 6px 8px; font-size: 12px;" onclick="this.previousElementSibling.click()">${eqImageBtnHtml(q.image ? 'Change Image' : 'Add Image')}</button>
-            ${removeBtnHtml}
+            ${q.image ? `<button type="button" class="btn btn-secondary eq-remove-btn" style="padding: 6px 8px; font-size: 12px;" onclick="window.removeEditQuestionImage(${q.id})">Remove Image</button>` : ''}
           </div>
         `}
+        <div class="options-grid" style="margin-top: 12px;">
+          ${isReadOnly ? optionLetters.map(opt => `
+            <div class="option-input" style="cursor: default; background: ${q.correct_opt === opt ? 'rgba(64, 160, 43, 0.1)' : 'rgba(203, 166, 247, 0.05)'}; border-color: ${q.correct_opt === opt ? 'rgba(64, 160, 43, 0.3)' : 'rgba(203, 166, 247, 0.1)'};">
+              <span style="font-weight: 600; margin-right: 8px;">${opt.toUpperCase()}.</span>
+              <span style="word-wrap: break-word; overflow-wrap: break-word;">${escapeAttr(optValues[opt])}</span>
+              ${q.correct_opt === opt ? '<span style="margin-left: auto; color: var(--success); font-weight: 600;">✓ Correct</span>' : ''}
+            </div>
+          `).join('') : optionsHtml}
+        </div>
       </div>
     `;
   }).join('');
+  
+  // If no questions and not read-only, still show add button
+  if (questions.length === 0 && !isReadOnly) {
+    body.innerHTML = addButtonHtml;
+  } else if (questions.length === 0 && isReadOnly) {
+    body.innerHTML = '<p class="text-muted">No questions found for this quiz.</p>';
+  }
   
   // Only add image listeners if not read-only
   if (!isReadOnly) {
     body.querySelectorAll('.edit-question-item').forEach(item => {
       const qid = item.dataset.qid;
       const imageInput = item.querySelector('.eq-image-input');
-      const imagePreview = item.querySelector('.eq-image-preview');
-      imageInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) {
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            editQuestionImages[qid] = event.target.result;
-            imagePreview.innerHTML = `<img src="${event.target.result}" style="max-width:200px; max-height:150px; border-radius:8px;">`;
-            const btnRow = imageInput.parentElement;
-            const imgBtn = btnRow.querySelector('.eq-image-btn');
-            if (imgBtn) imgBtn.innerHTML = eqImageBtnHtml('Change Image');
-            if (!btnRow.querySelector('.eq-remove-btn')) {
-              const rm = document.createElement('button');
-              rm.type = 'button';
-              rm.className = 'btn btn-secondary eq-remove-btn';
-              rm.style.padding = '6px 8px';
-              rm.style.fontSize = '12px';
-              rm.setAttribute('onclick', `removeEditQuestionImage(${qid})`);
-              rm.textContent = 'Remove Image';
-              btnRow.appendChild(rm);
-            }
-          };
-          reader.readAsDataURL(file);
-        }
-      });
+      if (imageInput) { // Only if image input exists (i.e., not read-only)
+        let imagePreview = item.querySelector('.eq-image-preview');
+        imageInput.addEventListener('change', (e) => {
+          const file = e.target.files[0];
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              editQuestionImages[qid] = event.target.result;
+              // If image preview div doesn't exist, create it and insert it after label
+              if (!imagePreview) {
+                const formGroup = item.querySelector('.form-group');
+                const labelContainer = formGroup.querySelector('div'); // The div containing label and delete button
+                imagePreview = document.createElement('div');
+                imagePreview.className = 'eq-image-preview';
+                imagePreview.style.marginBottom = '12px';
+                formGroup.insertBefore(imagePreview, labelContainer.nextSibling);
+              }
+              imagePreview.style.display = 'block';
+              imagePreview.innerHTML = `
+                <div style="display: flex; align-items: flex-start; gap: 8px;">
+                  <div class="resizable-image-container" style="width: 200px; height: 150px;">
+                    <img src="${event.target.result}">
+                  </div>
+                  <button type="button" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" onclick="window.removeEditQuestionImage('${qid}')">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  </button>
+                </div>
+              `;
+              const btnRow = imageInput.parentElement;
+              const imgBtn = btnRow.querySelector('.eq-image-btn');
+              if (imgBtn) imgBtn.innerHTML = eqImageBtnHtml('Change Image');
+              // Add Remove Image button if not present
+              if (!btnRow.querySelector('.eq-remove-btn')) {
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'btn btn-secondary eq-remove-btn';
+                removeBtn.style.padding = '6px 8px';
+                removeBtn.style.fontSize = '12px';
+                removeBtn.textContent = 'Remove Image';
+                removeBtn.onclick = () => window.removeEditQuestionImage(qid);
+                btnRow.appendChild(removeBtn);
+              }
+            };
+            reader.readAsDataURL(file);
+          }
+        });
+      }
     });
   }
   
@@ -1413,11 +1591,35 @@ window.removeEditQuestionImage = function(qid) {
   editQuestionImages[qid] = null;
   const item = document.querySelector(`.edit-question-item[data-qid="${qid}"]`);
   if (item) {
-    item.querySelector('.eq-image-preview').innerHTML = '';
-    const btn = item.querySelector('.eq-image-btn');
-    if (btn) btn.innerHTML = eqImageBtnHtml('Add Image');
-    const rm = item.querySelector('.eq-remove-btn');
-    if (rm) rm.remove();
+    const imagePreview = item.querySelector('.eq-image-preview');
+    if (imagePreview) {
+      if (String(qid).startsWith('new-')) {
+        imagePreview.style.display = 'none';
+        imagePreview.innerHTML = '';
+      } else {
+        imagePreview.remove();
+      }
+    }
+    const imgBtn = item.querySelector('.eq-image-btn');
+    if (imgBtn) imgBtn.innerHTML = eqImageBtnHtml('Add Image');
+    const removeBtn = item.querySelector('.eq-remove-btn');
+    if (removeBtn) removeBtn.remove();
+  }
+};
+
+let deletedQuestions = new Set(); // Keep track of question IDs to delete
+window.removeEditQuestion = async function(qid) {
+  if (confirm('Are you sure you want to delete this question?')) {
+    if (String(qid).startsWith('new-')) {
+      // It's a new question, just remove from DOM
+      const item = document.querySelector(`.edit-question-item[data-qid="${qid}"]`);
+      if (item) item.remove();
+    } else {
+      // Existing question, add to deleted set and remove from DOM
+      deletedQuestions.add(qid);
+      const item = document.querySelector(`.edit-question-item[data-qid="${qid}"]`);
+      if (item) item.remove();
+    }
   }
 };
 
@@ -1426,31 +1628,43 @@ window.saveQuestionEdits = async function() {
   const body = document.getElementById('view-questions-body');
   const items = body.querySelectorAll('.edit-question-item');
   
-  const updates = [];
-  for (const item of items) {
-    const qid = Number(item.dataset.qid);
-    const text = item.querySelector('.eq-text').value.trim();
-    const opt_a = item.querySelector('.eq-opt-a').value.trim();
-    const opt_b = item.querySelector('.eq-opt-b').value.trim();
-    const opt_c = item.querySelector('.eq-opt-c').value.trim();
-    const opt_d = item.querySelector('.eq-opt-d').value.trim();
-    const correctRadio = item.querySelector(`input[name="eq-correct-${qid}"]:checked`);
-    const correct_opt = correctRadio ? correctRadio.value : 'a';
-    const image = editQuestionImages[qid] !== undefined ? editQuestionImages[qid] : null;
-    
-    if (!text || !opt_a || !opt_b || !opt_c || !opt_d) {
-      alert(`Question ${qid}: All fields (text and 4 options) are required.`);
-      return;
-    }
-    updates.push({ qid, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image });
-  }
-  
   try {
-    for (const u of updates) {
-      await ipcRenderer.invoke(
-        'db:updateQuestion',
-        u.qid, u.text, u.opt_a, u.opt_b, u.opt_c, u.opt_d, u.correct_opt, u.image
-      );
+    // First delete any questions marked for deletion
+    for (const qid of deletedQuestions) {
+      await ipcRenderer.invoke('db:deleteQuestion', qid);
+    }
+    deletedQuestions.clear();
+    
+    // Now process each question item
+    for (const item of items) {
+      const qid = item.dataset.qid;
+      const text = item.querySelector('.eq-text').value.trim();
+      const opt_a = item.querySelector('.eq-opt-a').value.trim();
+      const opt_b = item.querySelector('.eq-opt-b').value.trim();
+      const opt_c = item.querySelector('.eq-opt-c').value.trim();
+      const opt_d = item.querySelector('.eq-opt-d').value.trim();
+      const correctRadio = item.querySelector(`input[name="eq-correct-${qid}"]:checked`);
+      const correct_opt = correctRadio ? correctRadio.value : 'a';
+      const image = editQuestionImages[qid] !== undefined ? editQuestionImages[qid] : null;
+      
+      if (!text || !opt_a || !opt_b || !opt_c || !opt_d) {
+        alert('All fields (text and 4 options) are required for each question.');
+        return;
+      }
+      
+      if (String(qid).startsWith('new-')) {
+        // New question, add to DB
+        await ipcRenderer.invoke(
+          'db:addQuestion',
+          currentEditQuizId, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image
+        );
+      } else {
+        // Existing question, update in DB
+        await ipcRenderer.invoke(
+          'db:updateQuestion',
+          Number(qid), text, opt_a, opt_b, opt_c, opt_d, correct_opt, image
+        );
+      }
     }
     alert('Changes saved successfully!');
     // Re-render to reflect saved values
@@ -1523,10 +1737,10 @@ function addQuestionUI() {
               </button>
             </div>
           </div>
+          <div class="q-image-preview" style="margin-bottom: 8px;"></div>
           <input type="text" class="q-text" placeholder="What is 2 + 2?" autocomplete="off">
-          <div class="q-image-preview" style="margin-top: 8px;"></div>
         </div>
-        <div class="options-grid">
+        <div class="options-grid" style="margin-top: 12px;">
           <div class="option-input" onclick="this.querySelector('input[type=radio]').checked = true;">
             <input type="radio" name="correct-${index}" value="a" checked>
             <input type="text" class="q-opt-a" placeholder="Option A" autocomplete="off" onclick="event.stopPropagation();">
@@ -1559,8 +1773,10 @@ function addQuestionUI() {
       reader.onload = (event) => {
         const base64 = event.target.result;
         imagePreview.innerHTML = `
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <img src="${base64}" style="max-width: 200px; max-height: 150px; border-radius: 8px;">
+          <div style="display: flex; align-items: flex-start; gap: 8px;">
+            <div class="resizable-image-container" style="width: 200px; height: 150px;">
+              <img src="${base64}">
+            </div>
             <button type="button" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" onclick="this.closest('.q-image-preview').innerHTML = ''; this.closest('.question-item').querySelector('.q-image-input').value = '';">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
