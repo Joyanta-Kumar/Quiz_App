@@ -556,6 +556,16 @@ const dbApi = {
     });
   },
 
+  updateQuestion: (id, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image) => {
+    return new Promise((resolve, reject) => {
+      db.run(`UPDATE questions SET text = ?, opt_a = ?, opt_b = ?, opt_c = ?, opt_d = ?, correct_opt = ?, image = ? WHERE id = ?`,
+        [text, opt_a, opt_b, opt_c, opt_d, correct_opt, image, id], function(err) {
+          if (err) reject(err);
+          else resolve(this.changes);
+        });
+    });
+  },
+
   deleteQuestion: (id) => {
     return new Promise((resolve, reject) => {
       db.run(`DELETE FROM questions WHERE id = ?`, [id], function(err) {

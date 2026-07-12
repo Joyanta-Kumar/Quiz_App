@@ -467,6 +467,31 @@ th {
   padding-right: 8px;
 }
 
+/* Editable questions in the View Questions modal */
+.edit-question-item {
+  background: rgba(255, 255, 255, 0.34);
+  border: 2px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 24px -12px var(--shadow);
+  transition: border-color 0.28s ease, box-shadow 0.28s ease;
+}
+
+.edit-question-item:focus-within {
+  border-color: rgba(114, 135, 253, 0.4);
+  box-shadow: 0 12px 28px -10px rgba(114, 135, 253, 0.25);
+}
+
+.edit-question-item .eq-text {
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.edit-question-item .eq-image-preview img {
+  display: block;
+}
+
 /* Elegant scrollbar for the View Questions list */
 #view-questions-modal #view-questions-body {
   scrollbar-width: thin;
@@ -515,12 +540,10 @@ th {
 .history-item {
   padding: 12px 16px;
   margin-bottom: 8px;
-  border-left: 3px solid transparent;
   color: var(--text-muted);
   font-weight: 500;
   transition: all 0.28s cubic-bezier(0.22, 1, 0.36, 1);
   cursor: pointer;
-  border-radius: 0 8px 8px 0;
 }
 
 .history-item:hover {
@@ -530,7 +553,6 @@ th {
 }
 
 .history-item.expanded {
-  border-left-color: var(--primary);
   color: var(--text-main);
 }
 
@@ -538,7 +560,6 @@ th {
 .quiz-card.history-item {
   padding: 24px;
   margin-bottom: 0;
-  border-left: none;
   transform: none;
 }
 

@@ -1263,7 +1263,29 @@ async function loadQuizzes() {
   updateDashboardSelectAllButton();
 }
 
+let currentEditQuizId = null;
+let currentEditTitle = '';
+let editQuestionImages = {}; // questionId -> base64 data URL or null
+
+function escapeAttr(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function eqImageBtnHtml(label) {
+  return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;">
+    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+    <polyline points="21 15 16 10 5 21"></polyline>
+  </svg> ${label}`;
+}
+
 window.openViewQuestionsModal = async function(quizId, title) {
+  currentEditQuizId = quizId;
+  currentEditTitle = title;
   document.getElementById('view-questions-title').textContent = title + ' - Questions';
   const body = document.getElementById('view-questions-body');
   
@@ -1271,37 +1293,135 @@ window.openViewQuestionsModal = async function(quizId, title) {
   
   if (questions.length === 0) {
     body.innerHTML = '<p class="text-muted">No questions found for this quiz.</p>';
-  } else {
-    body.innerHTML = questions.map((q, i) => {
-      const optLabels = { a: q.opt_a, b: q.opt_b, c: q.opt_c, d: q.opt_d };
-      const correctLabel = optLabels[q.correct_opt];
-      
-      return `
-        <div style="padding: 12px; border: 1px solid var(--panel-border); border-radius: 8px; margin-bottom: 12px;">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
-            <h4 style="margin: 0;">${i + 1}. ${q.text}</h4>
-            ${q.image ? `
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                <polyline points="21 15 16 10 5 21"></polyline>
-              </svg>
-            ` : ''}
-          </div>
-          ${q.image ? `<img src="${q.image}" style="max-width: 100%; max-height: 300px; border-radius: 8px; margin-bottom: 8px;">` : ''}
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
-            <div style="padding: 4px 8px; border-radius: 4px; background: ${q.correct_opt === 'a' ? 'var(--success-bg)' : 'var(--panel-bg)'};">A. ${q.opt_a}</div>
-            <div style="padding: 4px 8px; border-radius: 4px; background: ${q.correct_opt === 'b' ? 'var(--success-bg)' : 'var(--panel-bg)'};">B. ${q.opt_b}</div>
-            <div style="padding: 4px 8px; border-radius: 4px; background: ${q.correct_opt === 'c' ? 'var(--success-bg)' : 'var(--panel-bg)'};">C. ${q.opt_c}</div>
-            <div style="padding: 4px 8px; border-radius: 4px; background: ${q.correct_opt === 'd' ? 'var(--success-bg)' : 'var(--panel-bg)'};">D. ${q.opt_d}</div>
-          </div>
-          <p style="margin: 0; font-weight: bold; color: var(--success);">Correct Answer: ${q.correct_opt.toUpperCase()}. ${correctLabel}</p>
-        </div>
-      `;
-    }).join('');
+    document.getElementById('view-questions-modal').classList.add('active');
+    return;
   }
   
+  editQuestionImages = {};
+  questions.forEach(q => { editQuestionImages[q.id] = q.image || null; });
+  
+  const optionLetters = ['a', 'b', 'c', 'd'];
+  
+  body.innerHTML = questions.map((q, i) => {
+    const optValues = { a: q.opt_a, b: q.opt_b, c: q.opt_c, d: q.opt_d };
+    const imageHtml = q.image
+      ? `<img src="${q.image}" style="max-width:200px; max-height:150px; border-radius:8px;">`
+      : '';
+    const removeBtnHtml = q.image
+      ? `<button type="button" class="btn btn-secondary eq-remove-btn" style="padding: 6px 8px; font-size: 12px;" onclick="removeEditQuestionImage(${q.id})">Remove Image</button>`
+      : '';
+    
+    const optionsHtml = optionLetters.map(opt => `
+      <div class="option-input" onclick="this.querySelector('input[type=radio]').checked = true;">
+        <input type="radio" name="eq-correct-${q.id}" value="${opt}" ${q.correct_opt === opt ? 'checked' : ''}>
+        <input type="text" class="eq-opt-${opt}" value="${escapeAttr(optValues[opt])}" placeholder="Option ${opt.toUpperCase()}" autocomplete="off" onclick="event.stopPropagation();">
+      </div>
+    `).join('');
+    
+    return `
+      <div class="edit-question-item" data-qid="${q.id}">
+        <div class="form-group">
+          <label>Question ${i + 1}</label>
+          <input type="text" class="eq-text" value="${escapeAttr(q.text)}" placeholder="Question text" autocomplete="off">
+        </div>
+        <div class="options-grid">
+          ${optionsHtml}
+        </div>
+        <div class="eq-image-preview" style="margin-top: 8px;">
+          ${imageHtml}
+        </div>
+        <div style="margin-top: 8px; display: flex; gap: 8px;">
+          <input type="file" class="eq-image-input" accept="image/*" style="display: none;">
+          <button type="button" class="btn btn-secondary eq-image-btn" style="padding: 6px 8px; font-size: 12px;" onclick="this.previousElementSibling.click()">${eqImageBtnHtml(q.image ? 'Change Image' : 'Add Image')}</button>
+          ${removeBtnHtml}
+        </div>
+      </div>
+    `;
+  }).join('');
+  
+  body.querySelectorAll('.edit-question-item').forEach(item => {
+    const qid = item.dataset.qid;
+    const imageInput = item.querySelector('.eq-image-input');
+    const imagePreview = item.querySelector('.eq-image-preview');
+    imageInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          editQuestionImages[qid] = event.target.result;
+          imagePreview.innerHTML = `<img src="${event.target.result}" style="max-width:200px; max-height:150px; border-radius:8px;">`;
+          const btnRow = imageInput.parentElement;
+          const imgBtn = btnRow.querySelector('.eq-image-btn');
+          if (imgBtn) imgBtn.innerHTML = eqImageBtnHtml('Change Image');
+          if (!btnRow.querySelector('.eq-remove-btn')) {
+            const rm = document.createElement('button');
+            rm.type = 'button';
+            rm.className = 'btn btn-secondary eq-remove-btn';
+            rm.style.padding = '6px 8px';
+            rm.style.fontSize = '12px';
+            rm.setAttribute('onclick', `removeEditQuestionImage(${qid})`);
+            rm.textContent = 'Remove Image';
+            btnRow.appendChild(rm);
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  });
+  
   document.getElementById('view-questions-modal').classList.add('active');
+};
+
+window.removeEditQuestionImage = function(qid) {
+  editQuestionImages[qid] = null;
+  const item = document.querySelector(`.edit-question-item[data-qid="${qid}"]`);
+  if (item) {
+    item.querySelector('.eq-image-preview').innerHTML = '';
+    const btn = item.querySelector('.eq-image-btn');
+    if (btn) btn.innerHTML = eqImageBtnHtml('Add Image');
+    const rm = item.querySelector('.eq-remove-btn');
+    if (rm) rm.remove();
+  }
+};
+
+window.saveQuestionEdits = async function() {
+  if (!currentEditQuizId) return;
+  const body = document.getElementById('view-questions-body');
+  const items = body.querySelectorAll('.edit-question-item');
+  
+  const updates = [];
+  for (const item of items) {
+    const qid = Number(item.dataset.qid);
+    const text = item.querySelector('.eq-text').value.trim();
+    const opt_a = item.querySelector('.eq-opt-a').value.trim();
+    const opt_b = item.querySelector('.eq-opt-b').value.trim();
+    const opt_c = item.querySelector('.eq-opt-c').value.trim();
+    const opt_d = item.querySelector('.eq-opt-d').value.trim();
+    const correctRadio = item.querySelector(`input[name="eq-correct-${qid}"]:checked`);
+    const correct_opt = correctRadio ? correctRadio.value : 'a';
+    const image = editQuestionImages[qid] !== undefined ? editQuestionImages[qid] : null;
+    
+    if (!text || !opt_a || !opt_b || !opt_c || !opt_d) {
+      alert(`Question ${qid}: All fields (text and 4 options) are required.`);
+      return;
+    }
+    updates.push({ qid, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image });
+  }
+  
+  try {
+    for (const u of updates) {
+      await ipcRenderer.invoke(
+        'db:updateQuestion',
+        u.qid, u.text, u.opt_a, u.opt_b, u.opt_c, u.opt_d, u.correct_opt, u.image
+      );
+    }
+    alert('Changes saved successfully!');
+    // Re-render to reflect saved values
+    openViewQuestionsModal(currentEditQuizId, currentEditTitle);
+  } catch (err) {
+    console.error('Error saving question edits:', err);
+    alert('Failed to save changes: ' + (err.message || 'Unknown error'));
+  }
 };
 
 window.closeViewQuestionsModal = function() {
