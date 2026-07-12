@@ -1331,6 +1331,8 @@ function addEditQuestionUI() {
   const body = document.getElementById('view-questions-body');
   const qid = `new-${++newQuestionCounter}`;
   const optionLetters = ['a', 'b', 'c', 'd'];
+  const questionItems = body.querySelectorAll('.edit-question-item');
+  const index = questionItems.length;
   
   const qDiv = document.createElement('div');
   qDiv.className = 'edit-question-item';
@@ -1346,7 +1348,7 @@ function addEditQuestionUI() {
   qDiv.innerHTML = `
     <div class="form-group">
       <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
-        <label>New Question</label>
+        <label>Question ${index + 1}</label>
         <button class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;" onclick="window.removeEditQuestion('${qid}')">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="3 6 5 6 21 6"></polyline>
@@ -1620,6 +1622,15 @@ window.removeEditQuestion = async function(qid) {
       const item = document.querySelector(`.edit-question-item[data-qid="${qid}"]`);
       if (item) item.remove();
     }
+    // Reindex all question labels
+    const body = document.getElementById('view-questions-body');
+    const questionItems = body.querySelectorAll('.edit-question-item');
+    questionItems.forEach((item, index) => {
+      const label = item.querySelector('label');
+      if (label) {
+        label.textContent = `Question ${index + 1}`;
+      }
+    });
   }
 };
 
