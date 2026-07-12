@@ -398,9 +398,75 @@ function findMatchingColumn(headers, patterns) {
   return '--- Use Default ---';
 }
 
+let currentCSVStep = 1;
+
+// Go to next step
+function goToNextCSVStep() {
+  // Validate current step
+  if (currentCSVStep === 1) {
+    // Validate step 1: all dropdowns have a value
+    const regVal = document.getElementById('csv-map-reg').value;
+    const rollVal = document.getElementById('csv-map-roll').value;
+    const nameVal = document.getElementById('csv-map-name').value;
+    if (!regVal || !rollVal || !nameVal) {
+      alert('Please map all columns!');
+      return;
+    }
+  } else if (currentCSVStep === 2) {
+    // Validate step 2: all input fields are filled
+    const semester = document.getElementById('csv-input-semester').value.trim();
+    const session = document.getElementById('csv-input-session').value.trim();
+    const dept = document.getElementById('csv-input-dept').value.trim();
+    const batch = document.getElementById('csv-input-batch').value.trim();
+    if (!semester || !session || !dept || !batch) {
+      alert('Please fill in all batch info fields!');
+      return;
+    }
+    // Render preview before going to step 3
+    renderCSVPreviewTable();
+  }
+  
+  // Go to next step
+  if (currentCSVStep < 3) {
+    document.getElementById(`csv-step-${currentCSVStep}`).style.display = 'none';
+    currentCSVStep++;
+    document.getElementById(`csv-step-${currentCSVStep}`).style.display = 'block';
+    updateCSVModalButtons();
+  }
+}
+
+// Go to previous step
+function goToPrevCSVStep() {
+  if (currentCSVStep > 1) {
+    document.getElementById(`csv-step-${currentCSVStep}`).style.display = 'none';
+    currentCSVStep--;
+    document.getElementById(`csv-step-${currentCSVStep}`).style.display = 'block';
+    updateCSVModalButtons();
+  }
+}
+
+// Update modal button visibility
+function updateCSVModalButtons() {
+  const cancelBtn = document.getElementById('csv-cancel-btn');
+  const backBtn = document.getElementById('csv-back-btn');
+  const nextBtn = document.getElementById('csv-next-btn');
+  const importBtn = document.getElementById('csv-import-btn');
+  
+  backBtn.style.display = currentCSVStep > 1 ? 'inline-block' : 'none';
+  nextBtn.style.display = currentCSVStep < 3 ? 'inline-block' : 'none';
+  importBtn.style.display = currentCSVStep === 3 ? 'inline-block' : 'none';
+}
+
 // Open Preview Modal
 function openCSVPreviewModal() {
   const modal = document.getElementById('csv-preview-modal');
+  currentCSVStep = 1;
+  
+  // Reset all steps
+  document.getElementById('csv-step-1').style.display = 'block';
+  document.getElementById('csv-step-2').style.display = 'none';
+  document.getElementById('csv-step-3').style.display = 'none';
+  updateCSVModalButtons();
   
   // Get dropdown elements
   const dropdowns = {
@@ -419,18 +485,22 @@ function openCSVPreviewModal() {
   dropdowns.roll.value = findMatchingColumn(currentCSVHeaders, ['Class roll', 'Roll', 'Roll No', 'roll', 'class roll', 'roll_number']);
   dropdowns.name.value = findMatchingColumn(currentCSVHeaders, ['Name of Students', 'Student Name', 'Name', 'Full Name', 'name of students', 'student name', 'full_name']);
   
-  // Render preview table (first 10 rows)
-  renderCSVPreviewTable();
-  
-  // Add change listeners to update preview
+  // Add change listeners to inputs (for preview later)
   Object.values(dropdowns).forEach(dropdown => {
-    dropdown.addEventListener('change', renderCSVPreviewTable);
+    dropdown.addEventListener('change', () => {
+      if (currentCSVStep === 3) renderCSVPreviewTable();
+    });
   });
   ['csv-input-semester', 'csv-input-session', 'csv-input-dept', 'csv-input-batch'].forEach(id => {
-    document.getElementById(id).addEventListener('input', renderCSVPreviewTable);
+    document.getElementById(id).addEventListener('input', () => {
+      if (currentCSVStep === 3) renderCSVPreviewTable();
+    });
   });
   
-  // Add import button listener
+  // Add button listeners
+  document.getElementById('csv-next-btn').onclick = goToNextCSVStep;
+  document.getElementById('csv-back-btn').onclick = goToPrevCSVStep;
+  document.getElementById('csv-cancel-btn').onclick = closeCSVPreviewModal;
   document.getElementById('csv-import-btn').onclick = importStudentsFromPreview;
   
   modal.classList.add('active');

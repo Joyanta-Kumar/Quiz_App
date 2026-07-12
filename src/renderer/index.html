@@ -315,67 +315,77 @@
   </div>
 
   <!-- CSV Import Preview Modal -->
-  <div id="csv-preview-modal" class="modal">
-    <div class="modal-content glass-panel view-results-modal" style="max-width: 95%; max-height: 90vh; display: flex; flex-direction: column;">
-      <h2 style="flex-shrink: 0; margin: 0 0 16px 0;">Import Students from CSV</h2>
-      <div style="display: flex; flex-direction: column; gap: 16px; overflow-y: auto; padding-right: 4px; flex: 1 1 auto;">
-        <!-- Column Mapping Section -->
-        <div style="background: rgba(0,0,0,0.03); padding: 12px; border-radius: 8px; flex-shrink: 0;">
-          <h3 style="margin: 0 0 12px 0; font-size: 16px;">Step 1: Map Your CSV Columns</h3>
-          <p style="margin:0 0 12px 0; color: var(--text-muted); font-size: 13px;">Select which column from your CSV corresponds to each field:</p>
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">
-            <div class="form-group">
-              <label for="csv-map-reg">Registration Number</label>
-              <select id="csv-map-reg"></select>
-            </div>
-            <div class="form-group">
-              <label for="csv-map-roll">Class Roll</label>
-              <select id="csv-map-roll"></select>
-            </div>
-            <div class="form-group">
-              <label for="csv-map-name">Student Name</label>
-              <select id="csv-map-name"></select>
-            </div>
-          </div>
-        </div>
-        <!-- Default Values Section -->
-        <div style="background: rgba(0,0,0,0.03); padding: 12px; border-radius: 8px; flex-shrink: 0;">
-          <h3 style="margin: 0 0 12px 0; font-size: 16px;">Step 2: Fill in Additional Info (for all students)</h3>
-          <p style="margin:0 0 12px 0; color: var(--text-muted); font-size: 13px;">Enter values for these fields (they apply to all imported students):</p>
-          <p style="margin:0 0 12px 0; color: var(--danger); font-size: 12px; font-weight: 500;">⚠️ Use consistent formats! (e.g., always "2022-23" not "22-23", always "6" not "6th")</p>
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
-            <div class="form-group" style="margin-bottom:0;">
-              <label for="csv-input-semester">Semester</label>
-              <input type="text" id="csv-input-semester" placeholder="e.g., 3rd" />
-            </div>
-            <div class="form-group" style="margin-bottom:0;">
-              <label for="csv-input-session">Session</label>
-              <input type="text" id="csv-input-session" placeholder="e.g., 2022-23" />
-            </div>
-            <div class="form-group" style="margin-bottom:0;">
-              <label for="csv-input-dept">Department</label>
-              <input type="text" id="csv-input-dept" placeholder="e.g., CSE" />
-            </div>
-            <div class="form-group" style="margin-bottom:0;">
-              <label for="csv-input-batch">Batch</label>
-              <input type="text" id="csv-input-batch" placeholder="e.g., 2022" />
+    <div id="csv-preview-modal" class="modal">
+      <div class="modal-content glass-panel view-results-modal" style="max-width: 800px; display: flex; flex-direction: column;">
+        <h2 style="flex-shrink: 0; margin: 0 0 16px 0;">Import Students from CSV</h2>
+        <div id="csv-step-1" class="csv-step" style="flex: 1 1 auto;">
+          <!-- Column Mapping -->
+          <div style="background: rgba(0,0,0,0.03); padding: 12px; border-radius: 8px;">
+            <h3 style="margin: 0 0 12px 0; font-size: 16px;">Map Your CSV Columns</h3>
+            <p style="margin:0 0 12px 0; color: var(--text-muted); font-size: 13px;">Select which column from your CSV corresponds to each field:</p>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">
+              <div class="form-group">
+                <label for="csv-map-reg">Registration Number</label>
+                <select id="csv-map-reg"></select>
+              </div>
+              <div class="form-group">
+                <label for="csv-map-roll">Class Roll</label>
+                <select id="csv-map-roll"></select>
+              </div>
+              <div class="form-group">
+                <label for="csv-map-name">Student Name</label>
+                <select id="csv-map-name"></select>
+              </div>
             </div>
           </div>
         </div>
-        <!-- Preview Section -->
-        <div style="overflow: hidden; flex: 1 1 auto; min-height: 0;">
-          <h3 style="margin: 0 0 8px 0; font-size: 16px;">Step 3: Preview (First 10 Students)</h3>
-          <div class="table-container" style="height: 100%; overflow-y: auto;">
-            <table class="submissions-table" id="csv-preview-table"></table>
+        <div id="csv-step-2" class="csv-step" style="flex: 1 1 auto; display: none;">
+          <!-- Batch Info -->
+          <div style="background: rgba(0,0,0,0.03); padding: 12px; border-radius: 8px;">
+            <h3 style="margin: 0 0 12px 0; font-size: 16px;">Fill in Batch Info</h3>
+            <p style="margin:0 0 12px 0; color: var(--text-muted); font-size: 13px;">Enter values for these fields (they apply to all imported students):</p>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="csv-input-semester">Semester</label>
+                <input type="text" id="csv-input-semester" placeholder="e.g., 6th" />
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="csv-input-session">Session</label>
+                <input type="text" id="csv-input-session" placeholder="e.g., 2022-23" />
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="csv-input-dept">Department</label>
+                <input type="text" id="csv-input-dept" placeholder="e.g., CSE" />
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="csv-input-batch">Batch</label>
+                <input type="text" id="csv-input-batch" placeholder="e.g., 6th" />
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-      <div class="modal-actions" style="display: flex; gap: 8px; margin-top: 16px; padding-top: 8px; border-top: 1px solid var(--panel-border); flex-shrink: 0;">
-        <button class="btn btn-secondary" onclick="closeCSVPreviewModal()">Cancel</button>
-        <button class="btn btn-primary" id="csv-import-btn">Import Students</button>
+        <div id="csv-step-3" class="csv-step" style="flex: 1 1 auto; display: none;">
+          <!-- Preview -->
+          <div style="overflow: hidden; min-height: 0;">
+            <h3 style="margin: 0 0 8px 0; font-size: 16px;">Preview (First 10 Students)</h3>
+            <div class="table-container" style="max-height: 300px; overflow-y: auto;">
+              <table class="submissions-table" id="csv-preview-table"></table>
+            </div>
+          </div>
+        </div>
+        <!-- Modal Actions -->
+        <div id="csv-modal-actions" class="modal-actions" style="display: flex; justify-content: space-between; gap: 8px; margin-top: 16px; padding-top: 8px; border-top: 1px solid var(--panel-border); flex-shrink: 0;">
+          <div id="csv-modal-left-actions">
+            <button class="btn btn-secondary" id="csv-cancel-btn">Cancel</button>
+            <button class="btn btn-secondary" id="csv-back-btn" style="display: none;">Back</button>
+          </div>
+          <div id="csv-modal-right-actions">
+            <button class="btn btn-primary" id="csv-next-btn">Next</button>
+            <button class="btn btn-primary" id="csv-import-btn" style="display: none;">Import Students</button>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
 
   <script src="renderer.js"></script>
 </body>

@@ -65,6 +65,24 @@ async function loadSessionYears() {
   }
 }
 
+// Fetch unique departments and populate dropdown
+async function loadDepartments() {
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/api/students/departments`);
+    const departments = await res.json();
+    const select = document.getElementById('login-department');
+    select.innerHTML = '<option value="">Select department...</option>';
+    departments.forEach(department => {
+      const option = document.createElement('option');
+      option.value = department;
+      option.textContent = department;
+      select.appendChild(option);
+    });
+  } catch (err) {
+    console.error('Failed to load departments:', err);
+  }
+}
+
 // Init
 function init() {
   // Check if server address is stored in localStorage (for backward compatibility)
@@ -73,8 +91,9 @@ function init() {
     serverAddress = storedServerAddress;
   }
   
-  // Load session years when login view is shown
+  // Load session years and departments when login view is shown
   loadSessionYears();
+  loadDepartments();
   
   // Check if student is logged in from localStorage
   const storedStudent = localStorage.getItem('quizmaster-student');
@@ -101,6 +120,7 @@ logoutBtn.addEventListener('click', () => {
   switchView('login');
   loginError.textContent = '';
   loadSessionYears(); // Reload session years in case new ones were added
+  loadDepartments(); // Reload departments in case new ones were added
 });
 
 // Helper: Normalize registration number (remove hyphens, trim whitespace, lowercase)
@@ -114,14 +134,15 @@ loginForm.addEventListener('submit', async (e) => {
   
   const registrationNumber = document.getElementById('login-registration-number').value.trim();
   const sessionYear = document.getElementById('login-session-year').value.trim();
+  const department = document.getElementById('login-department').value.trim();
 
-  if (!registrationNumber || !sessionYear) return;
+  if (!registrationNumber || !sessionYear || !department) return;
 
   try {
     const res = await fetch(`${getApiBaseUrl()}/api/students/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ registrationNumber, sessionYear }) // We send original to server, server normalizes
+      body: JSON.stringify({ registrationNumber, sessionYear, department }) // We send original to server, server normalizes
     });
     const data = await res.json();
 

@@ -376,7 +376,7 @@ const dbApi = {
     });
   },
 
-  getStudentByRegistrationAndSession: async (registrationNumber, sessionYear) => {
+  getStudentByRegistrationAndSession: async (registrationNumber, sessionYear, department) => {
     return new Promise(async (resolve, reject) => {
       // First, check if "name" column exists
       const hasNameColumn = await columnExists('students', 'name');
@@ -384,10 +384,10 @@ const dbApi = {
       
       // Build the query - we'll normalize stored registration number in SQL
       const query = hasNameColumn 
-        ? `SELECT id, registration_number, roll_number, COALESCE(full_name, name) as full_name, semester, session_year, department, batch, verified FROM students WHERE REPLACE(REPLACE(LOWER(registration_number), '-', ''), ' ', '') = ? AND session_year = ?`
-        : `SELECT * FROM students WHERE REPLACE(REPLACE(LOWER(registration_number), '-', ''), ' ', '') = ? AND session_year = ?`;
+        ? `SELECT id, registration_number, roll_number, COALESCE(full_name, name) as full_name, semester, session_year, department, batch, verified FROM students WHERE REPLACE(REPLACE(LOWER(registration_number), '-', ''), ' ', '') = ? AND session_year = ? AND department = ?`
+        : `SELECT * FROM students WHERE REPLACE(REPLACE(LOWER(registration_number), '-', ''), ' ', '') = ? AND session_year = ? AND department = ?`;
       
-      db.get(query, [normalizedInputRegNo, sessionYear], (err, row) => {
+      db.get(query, [normalizedInputRegNo, sessionYear, department], (err, row) => {
         if (err) reject(err);
         else resolve(row);
       });
@@ -771,6 +771,15 @@ const dbApi = {
       db.all(`SELECT DISTINCT session_year FROM students WHERE deleted = 0 AND session_year IS NOT NULL ORDER BY session_year`, (err, rows) => {
         if (err) reject(err);
         else resolve(rows.map(r => r.session_year));
+      });
+    });
+  },
+
+  getUniqueDepartments: () => {
+    return new Promise((resolve, reject) => {
+      db.all(`SELECT DISTINCT department FROM students WHERE deleted = 0 AND department IS NOT NULL ORDER BY department`, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows.map(r => r.department));
       });
     });
   }

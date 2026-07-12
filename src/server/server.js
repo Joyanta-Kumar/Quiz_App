@@ -44,15 +44,24 @@ async function startServer(port = 3000) {
     }
   });
 
+  app.get('/api/students/departments', async (req, res) => {
+    try {
+      const departments = await dbApi.getUniqueDepartments();
+      res.json(departments);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post('/api/students/login', async (req, res) => {
     try {
-      const { registrationNumber, sessionYear } = req.body;
+      const { registrationNumber, sessionYear, department } = req.body;
       
-      if (!registrationNumber || !sessionYear) {
-        return res.status(400).json({ error: 'Registration number and session year are required' });
+      if (!registrationNumber || !sessionYear || !department) {
+        return res.status(400).json({ error: 'Registration number, session year, and department are required' });
       }
 
-      const student = await dbApi.getStudentByRegistrationAndSession(registrationNumber, sessionYear);
+      const student = await dbApi.getStudentByRegistrationAndSession(registrationNumber, sessionYear, department);
       if (!student) {
         return res.status(404).json({ error: 'Student not found' });
       }
