@@ -4,6 +4,7 @@ let ws = null;
 let roll = '';
 let name = '';
 let semester = '';
+let batch = '';
 let registrationNumber = '';
 let sessionId = null;
 let timerInterval = null;
@@ -24,11 +25,17 @@ const quizTitleEl = document.getElementById('quiz-title');
 const studentInfoEl = document.getElementById('student-info');
 const studentGreetingEl = document.getElementById('student-greeting');
 const timerEl = document.getElementById('timer');
+const timerMinimalEl = document.getElementById('timer-minimal');
+const quizFullHeader = document.getElementById('quiz-full-header');
+const quizMinimalHeader = document.getElementById('quiz-minimal-header');
+const quizView = document.getElementById('view-quiz');
 const timerBox = document.querySelector('.timer-box');
 const questionsContainer = document.getElementById('questions-container');
 const submitQuizBtn = document.getElementById('submit-quiz-btn');
 const finalScoreEl = document.getElementById('final-score');
 const logoutBtn = document.getElementById('logout-btn');
+
+let scrollHandler = null;
 
 // Helper function to get API base URL
 function getApiBaseUrl() {
@@ -165,6 +172,7 @@ joinBtn.addEventListener('click', async () => {
   roll = currentStudent.roll_number;
   name = currentStudent.full_name;
   semester = currentStudent.semester;
+  batch = currentStudent.batch;
   
   try {
     // Fetch active session details
@@ -192,7 +200,7 @@ function connectWS() {
   ws.onopen = () => {
     ws.send(JSON.stringify({
       type: 'client:join',
-      payload: { registrationNumber, roll, name, semester }
+      payload: { registrationNumber, roll, name, semester, batch }
     }));
   };
   
@@ -227,6 +235,10 @@ function connectWS() {
 
 // Quiz Flow
 function startQuiz(startTime, duration) {
+  // Reset header states
+  quizFullHeader.classList.remove('hidden');
+  quizMinimalHeader.classList.remove('visible');
+  
   switchView('quiz');
   quizTitleEl.textContent = sessionData.title;
   studentInfoEl.textContent = `Roll: ${roll} | ${name}`;
@@ -239,6 +251,21 @@ function startQuiz(startTime, duration) {
   
   // Initialize and start timer
   updateTimerDisplay();
+  
+  // Scroll handler to toggle headers
+  scrollHandler = () => {
+    const scrollTop = quizView.scrollTop;
+    if (scrollTop > 50) {
+      quizFullHeader.classList.add('hidden');
+      quizMinimalHeader.classList.add('visible');
+    } else {
+      quizFullHeader.classList.remove('hidden');
+      quizMinimalHeader.classList.remove('visible');
+    }
+  };
+  
+  // Attach scroll listener
+  quizView.addEventListener('scroll', scrollHandler);
   
   timerInterval = setInterval(() => {
     updateTimerDisplay();
@@ -298,6 +325,7 @@ function updateTimerDisplay() {
   const m = Math.floor(remaining / 60).toString().padStart(2, '0');
   const s = (remaining % 60).toString().padStart(2, '0');
   timerEl.textContent = `${m}:${s}`;
+  timerMinimalEl.textContent = `${m}:${s}`;
   
   if (remaining <= 60 && remaining > 0) {
     timerBox.classList.add('warning');
@@ -311,6 +339,16 @@ submitQuizBtn.addEventListener('click', () => submitQuiz(false));
 function submitQuiz(timedOut) {
   if (hasSubmitted) return; // Prevent duplicate submissions
   hasSubmitted = true;
+  
+  // Clean up scroll listener
+  if (scrollHandler && quizView) {
+    quizView.removeEventListener('scroll', scrollHandler);
+    scrollHandler = null;
+  }
+  
+  // Reset header states
+  quizFullHeader.classList.remove('hidden');
+  quizMinimalHeader.classList.remove('visible');
   
   if (timerInterval) clearInterval(timerInterval);
   timerInterval = null;
@@ -327,6 +365,7 @@ function submitQuiz(timedOut) {
     roll,
     name,
     semester,
+    batch,
     answers,
     timedOut: actualTimedOut
   };

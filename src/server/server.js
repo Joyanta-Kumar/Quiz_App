@@ -459,6 +459,16 @@ async function startServer(port = 3000) {
                 teacherWs.send(JSON.stringify({ type: 'server:client_joined', payload: data.payload }));
               }
               ws.send(JSON.stringify({ type: 'server:join_accepted' }));
+              // If quiz has already started, send the session:start message to this new student
+              if (quizStartTime) {
+                ws.send(JSON.stringify({ 
+                  type: 'session:start', 
+                  payload: { 
+                    startTime: quizStartTime,
+                    duration: quizDuration
+                  }
+                }));
+              }
             }
             break;
 

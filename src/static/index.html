@@ -69,14 +69,23 @@
 
     <!-- Quiz View -->
     <main id="view-quiz" class="view quiz-layout">
-      <header class="quiz-header glass-header">
-        <div>
+      <!-- Full header with title and info -->
+      <header class="quiz-header glass-header" id="quiz-full-header">
+        <div class="quiz-header-content">
           <h2 id="quiz-title">Quiz Title</h2>
           <p class="subtitle" id="student-info">Roll: 101 | John Doe</p>
         </div>
         <div class="timer-box">
           <span class="timer-label">Time Remaining</span>
           <span class="timer-value" id="timer">00:00</span>
+        </div>
+      </header>
+      
+      <!-- Minimal timer-only header that appears when scrolling -->
+      <header class="quiz-header glass-header quiz-header-minimal" id="quiz-minimal-header">
+        <div class="timer-box">
+          <span class="timer-label">Time Remaining</span>
+          <span class="timer-value" id="timer-minimal">00:00</span>
         </div>
       </header>
 

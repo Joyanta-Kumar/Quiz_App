@@ -38,7 +38,9 @@ body {
 .app-container {
   flex: 1;
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-height: 100vh;
 }
 
 /* Background animated elements for extra premium feel */
@@ -387,4 +389,148 @@ select {
   font-size: 4rem;
   color: var(--primary);
   text-shadow: 0 0 20px var(--primary-glow);
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .view {
+    padding: 16px;
+  }
+  
+  .glass-card {
+    padding: 24px;
+    border-radius: 16px;
+  }
+  
+  .glass-header {
+    padding: 16px;
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  h2 {
+    font-size: 1.5rem;
+  }
+  
+  .question-card {
+    padding: 20px;
+    border-radius: 12px;
+  }
+  
+  .q-text {
+    font-size: 1.1rem;
+  }
+  
+  .option-label {
+    padding: 12px;
+  }
+  
+  .quiz-content {
+    padding: 24px 16px;
+  }
+  
+  .score-box h1 {
+    font-size: 3rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .view {
+    padding: 12px;
+  }
+  
+  .glass-card {
+    padding: 20px;
+  }
+  
+  h2 {
+    font-size: 1.25rem;
+  }
+  
+  .btn {
+    padding: 12px 16px;
+    font-size: 1rem;
+  }
+  
+  .question-card {
+    padding: 16px;
+  }
+  
+  .q-text {
+    font-size: 1rem;
+  }
+  
+  .option-text {
+    font-size: 1rem;
+  }
+}
+
+/* Sticky Timer Header Styles */
+.quiz-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  padding: 24px 32px;
+  border-bottom: 1px solid var(--glass-border);
+  background: rgba(255,255,255,0.05);
+  transition: opacity 0.3s ease, transform 0.3s ease, height 0.3s ease, padding 0.3s ease, margin 0.3s ease, border-bottom 0.3s ease;
+}
+
+/* Minimal sticky timer header */
+.quiz-header-minimal {
+  position: fixed; /* Fixed to the viewport */
+  top: 16px;
+  right: 16px;
+  z-index: 100;
+  opacity: 0;
+  transform: translateY(-100%);
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  padding: 12px 16px;
+  border-radius: 16px;
+  width: auto; /* Don't take full width */
+  border: none;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.quiz-header-minimal.visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* Make the timer box smaller in minimal header */
+.quiz-header-minimal .timer-box {
+  padding: 0;
+  margin: 0;
+  gap: 8px;
+  display: flex;
+  align-items: center;
+}
+
+.quiz-header-minimal .timer-label {
+  display: none;
+}
+
+.quiz-header-minimal .timer-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.quiz-header-content {
+  flex: 1;
+}
+
+/* Hide full header when scrolling */
+#quiz-full-header.hidden {
+  opacity: 0;
+  transform: translateY(-100%);
+  pointer-events: none;
+  height: 0;
+  padding: 0;
+  margin: 0;
+  border-bottom: none;
+  overflow: hidden;
 }

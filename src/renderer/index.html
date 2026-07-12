@@ -118,9 +118,7 @@
         <div class="live-layout">
           <div class="glass-panel students-panel">
             <h3>Connected Students (<span id="student-count">0</span>)</h3>
-            <ul id="students-list" class="students-list">
-              <!-- Students populated via JS -->
-            </ul>
+            <button class="btn btn-secondary" onclick="window.switchView('connected-students')">View Students</button>
           </div>
           <div class="glass-panel submissions-panel" id="live-submissions-panel">
             <h3>Live Submissions</h3>
@@ -227,6 +225,35 @@
         </header>
         <div id="recycle-container" class="quizzes-grid">
           <!-- Deleted items will be populated by renderer.js -->
+        </div>
+      </section>
+
+      <!-- Connected Students View -->
+      <section id="view-connected-students" class="view">
+        <header>
+          <h1>Connected Students (<span id="connected-students-count">0</span>)</h1>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary" onclick="window.switchView('live')">Close</button>
+          </div>
+        </header>
+        <div class="glass-panel">
+          <div class="table-container">
+            <table class="submissions-table">
+              <thead>
+                <tr>
+                  <th>Sl No</th>
+                  <th>Reg No</th>
+                  <th>Class Roll</th>
+                  <th>Name</th>
+                  <th>Semester</th>
+                  <th>Batch</th>
+                </tr>
+              </thead>
+              <tbody id="connected-students-list">
+                <!-- Students populated via JS -->
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 

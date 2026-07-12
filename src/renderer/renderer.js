@@ -9,6 +9,7 @@ let isJoinsClosed = false;
 let isQuizStarted = false;
 let showAnswersToStudents = false;
 let showTeacherAnswers = false;
+let connectedStudents = [];
 
 // DOM Elements
 const views = document.querySelectorAll('.view');
@@ -218,6 +219,30 @@ window.switchView = function(viewId) {
   if (viewId === 'history') loadHistory();
   if (viewId === 'students') loadStudents();
   if (viewId === 'recycle') loadDeletedItems();
+  if (viewId === 'connected-students') {
+    // Sort connected students by Class Roll ascending before rendering
+    const sortedStudents = [...connectedStudents].sort((a, b) => {
+      const rollA = isNaN(parseInt(a.roll)) ? a.roll : parseInt(a.roll);
+      const rollB = isNaN(parseInt(b.roll)) ? b.roll : parseInt(b.roll);
+      if (typeof rollA === 'number' && typeof rollB === 'number') {
+        return rollA - rollB;
+      }
+      return String(rollA).localeCompare(String(rollB));
+    });
+    
+    // Render connected students table when switching to view
+    const list = document.getElementById('connected-students-list');
+    list.innerHTML = sortedStudents.map((student, index) => 
+      `<tr>
+        <td>${index + 1}</td>
+        <td>${student.registrationNumber || 'N/A'}</td>
+        <td>${student.roll}</td>
+        <td>${student.name}</td>
+        <td>${student.semester || 'N/A'}</td>
+        <td>${student.batch || 'N/A'}</td>
+      </tr>`
+    ).join('');
+  }
 }
 
 let allStudents = [];
@@ -865,7 +890,7 @@ async function loadHistory() {
               <div class="history-item-actions">
                 <button class="btn btn-secondary" onclick="event.stopPropagation(); window.viewSessionDetails(${session.id})">Details</button>
                 <button class="btn btn-secondary" onclick="event.stopPropagation(); window.viewSessionResults(${session.id}, '${title.replace(/'/g, "\\'")}')">View Results</button>
-                <button class="btn btn-secondary" onclick="event.stopPropagation(); window.openViewQuestionsModal(${session.quiz_id}, '${title.replace(/'/g, "\\'")}')">Questions</button>
+                <button class="btn btn-secondary" onclick="event.stopPropagation(); window.openViewQuestionsModal(${session.quiz_id}, '${title.replace(/'/g, "\\'")}', true)">Questions</button>
                 <button class="btn btn-secondary" onclick="event.stopPropagation(); window.exportSession(${session.id})">Export</button>
               </div>
             ` : ''}
@@ -1250,7 +1275,8 @@ async function loadQuizzes() {
           ${detailsHtml}
           ${!isSelectModeDashboard ? `
             <div class="card-actions">
-              <button class="btn btn-secondary" onclick="openViewQuestionsModal(${quiz.id}, '${title.replace(/'/g, "\\'")}')">View Questions</button>
+              <button class="btn btn-secondary" onclick="openViewQuestionsModal(${quiz.id}, '${title.replace(/'/g, "\\'")}', true)">View Questions</button>
+              <button class="btn btn-secondary" onclick="openViewQuestionsModal(${quiz.id}, '${title.replace(/'/g, "\\'")}', false)">Edit Questions</button>
               <button class="btn btn-primary" onclick="openStartSessionModal(${quiz.id}, '${title.replace(/'/g, "\\'")}')">Start Session</button>
             </div>
           ` : ''}
@@ -1283,11 +1309,17 @@ function eqImageBtnHtml(label) {
   </svg> ${label}`;
 }
 
-window.openViewQuestionsModal = async function(quizId, title) {
+window.openViewQuestionsModal = async function(quizId, title, isReadOnly = false) {
   currentEditQuizId = quizId;
   currentEditTitle = title;
   document.getElementById('view-questions-title').textContent = title + ' - Questions';
   const body = document.getElementById('view-questions-body');
+  
+  // Hide or show Save Changes button based on isReadOnly
+  const saveBtn = document.querySelector('#view-questions-modal .modal-actions .btn-primary');
+  if (saveBtn) {
+    saveBtn.style.display = isReadOnly ? 'none' : 'inline-block';
+  }
   
   const questions = await ipcRenderer.invoke('db:getQuestionsByQuiz', quizId);
   
@@ -1307,14 +1339,14 @@ window.openViewQuestionsModal = async function(quizId, title) {
     const imageHtml = q.image
       ? `<img src="${q.image}" style="max-width:200px; max-height:150px; border-radius:8px;">`
       : '';
-    const removeBtnHtml = q.image
+    const removeBtnHtml = (q.image && !isReadOnly)
       ? `<button type="button" class="btn btn-secondary eq-remove-btn" style="padding: 6px 8px; font-size: 12px;" onclick="removeEditQuestionImage(${q.id})">Remove Image</button>`
       : '';
     
     const optionsHtml = optionLetters.map(opt => `
-      <div class="option-input" onclick="this.querySelector('input[type=radio]').checked = true;">
-        <input type="radio" name="eq-correct-${q.id}" value="${opt}" ${q.correct_opt === opt ? 'checked' : ''}>
-        <input type="text" class="eq-opt-${opt}" value="${escapeAttr(optValues[opt])}" placeholder="Option ${opt.toUpperCase()}" autocomplete="off" onclick="event.stopPropagation();">
+      <div class="option-input" ${isReadOnly ? '' : 'onclick="this.querySelector(\'input[type=radio]\').checked = true;"'}>
+        <input type="radio" name="eq-correct-${q.id}" value="${opt}" ${q.correct_opt === opt ? 'checked' : ''} ${isReadOnly ? 'disabled' : ''}>
+        <input type="text" class="eq-opt-${opt}" value="${escapeAttr(optValues[opt])}" placeholder="Option ${opt.toUpperCase()}" autocomplete="off" ${isReadOnly ? 'disabled' : 'onclick="event.stopPropagation();"'}>
       </div>
     `).join('');
     
@@ -1322,7 +1354,7 @@ window.openViewQuestionsModal = async function(quizId, title) {
       <div class="edit-question-item" data-qid="${q.id}">
         <div class="form-group">
           <label>Question ${i + 1}</label>
-          <input type="text" class="eq-text" value="${escapeAttr(q.text)}" placeholder="Question text" autocomplete="off">
+          <input type="text" class="eq-text" value="${escapeAttr(q.text)}" placeholder="Question text" autocomplete="off" ${isReadOnly ? 'disabled' : ''}>
         </div>
         <div class="options-grid">
           ${optionsHtml}
@@ -1330,44 +1362,49 @@ window.openViewQuestionsModal = async function(quizId, title) {
         <div class="eq-image-preview" style="margin-top: 8px;">
           ${imageHtml}
         </div>
-        <div style="margin-top: 8px; display: flex; gap: 8px;">
-          <input type="file" class="eq-image-input" accept="image/*" style="display: none;">
-          <button type="button" class="btn btn-secondary eq-image-btn" style="padding: 6px 8px; font-size: 12px;" onclick="this.previousElementSibling.click()">${eqImageBtnHtml(q.image ? 'Change Image' : 'Add Image')}</button>
-          ${removeBtnHtml}
-        </div>
+        ${isReadOnly ? '' : `
+          <div style="margin-top: 8px; display: flex; gap: 8px;">
+            <input type="file" class="eq-image-input" accept="image/*" style="display: none;">
+            <button type="button" class="btn btn-secondary eq-image-btn" style="padding: 6px 8px; font-size: 12px;" onclick="this.previousElementSibling.click()">${eqImageBtnHtml(q.image ? 'Change Image' : 'Add Image')}</button>
+            ${removeBtnHtml}
+          </div>
+        `}
       </div>
     `;
   }).join('');
   
-  body.querySelectorAll('.edit-question-item').forEach(item => {
-    const qid = item.dataset.qid;
-    const imageInput = item.querySelector('.eq-image-input');
-    const imagePreview = item.querySelector('.eq-image-preview');
-    imageInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          editQuestionImages[qid] = event.target.result;
-          imagePreview.innerHTML = `<img src="${event.target.result}" style="max-width:200px; max-height:150px; border-radius:8px;">`;
-          const btnRow = imageInput.parentElement;
-          const imgBtn = btnRow.querySelector('.eq-image-btn');
-          if (imgBtn) imgBtn.innerHTML = eqImageBtnHtml('Change Image');
-          if (!btnRow.querySelector('.eq-remove-btn')) {
-            const rm = document.createElement('button');
-            rm.type = 'button';
-            rm.className = 'btn btn-secondary eq-remove-btn';
-            rm.style.padding = '6px 8px';
-            rm.style.fontSize = '12px';
-            rm.setAttribute('onclick', `removeEditQuestionImage(${qid})`);
-            rm.textContent = 'Remove Image';
-            btnRow.appendChild(rm);
-          }
-        };
-        reader.readAsDataURL(file);
-      }
+  // Only add image listeners if not read-only
+  if (!isReadOnly) {
+    body.querySelectorAll('.edit-question-item').forEach(item => {
+      const qid = item.dataset.qid;
+      const imageInput = item.querySelector('.eq-image-input');
+      const imagePreview = item.querySelector('.eq-image-preview');
+      imageInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            editQuestionImages[qid] = event.target.result;
+            imagePreview.innerHTML = `<img src="${event.target.result}" style="max-width:200px; max-height:150px; border-radius:8px;">`;
+            const btnRow = imageInput.parentElement;
+            const imgBtn = btnRow.querySelector('.eq-image-btn');
+            if (imgBtn) imgBtn.innerHTML = eqImageBtnHtml('Change Image');
+            if (!btnRow.querySelector('.eq-remove-btn')) {
+              const rm = document.createElement('button');
+              rm.type = 'button';
+              rm.className = 'btn btn-secondary eq-remove-btn';
+              rm.style.padding = '6px 8px';
+              rm.style.fontSize = '12px';
+              rm.setAttribute('onclick', `removeEditQuestionImage(${qid})`);
+              rm.textContent = 'Remove Image';
+              btnRow.appendChild(rm);
+            }
+          };
+          reader.readAsDataURL(file);
+        }
+      });
     });
-  });
+  }
   
   document.getElementById('view-questions-modal').classList.add('active');
 };
@@ -1417,7 +1454,7 @@ window.saveQuestionEdits = async function() {
     }
     alert('Changes saved successfully!');
     // Re-render to reflect saved values
-    openViewQuestionsModal(currentEditQuizId, currentEditTitle);
+    openViewQuestionsModal(currentEditQuizId, currentEditTitle, false);
   } catch (err) {
     console.error('Error saving question edits:', err);
     alert('Failed to save changes: ' + (err.message || 'Unknown error'));
@@ -1708,15 +1745,14 @@ async function loadLiveQuestionsAndAnswers() {
   } else {
     container.innerHTML = questions.map((q, i) => {
       return `
-        <div style="padding: 12px; border: 1px solid var(--panel-border); border-radius: 8px; margin-bottom: 12px;">
-          <h4 style="margin: 0 0 8px 0;">${i + 1}. ${q.text}</h4>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
-            <div style="padding: 4px 8px; border-radius: 4px; background: ${q.correct_opt === 'a' ? 'var(--success-bg)' : 'var(--panel-bg)'};">A. ${q.opt_a}</div>
-            <div style="padding: 4px 8px; border-radius: 4px; background: ${q.correct_opt === 'b' ? 'var(--success-bg)' : 'var(--panel-bg)'};">B. ${q.opt_b}</div>
-            <div style="padding: 4px 8px; border-radius: 4px; background: ${q.correct_opt === 'c' ? 'var(--success-bg)' : 'var(--panel-bg)'};">C. ${q.opt_c}</div>
-            <div style="padding: 4px 8px; border-radius: 4px; background: ${q.correct_opt === 'd' ? 'var(--success-bg)' : 'var(--panel-bg)'};">D. ${q.opt_d}</div>
+        <div style="padding: 16px; border: 1px solid var(--panel-border); border-radius: 12px; margin-bottom: 12px; background: rgba(255,255,255,0.35); backdrop-filter: blur(18px) saturate(160%); box-shadow: 0 4px 12px var(--shadow);">
+          <h4 style="margin: 0 0 12px 0;">${i + 1}. ${q.text}</h4>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px;">
+            <div style="padding: 10px 12px; border-radius: 8px; background: ${q.correct_opt === 'a' ? 'var(--success-bg)' : 'rgba(255,255,255,0.25)'}; border: 1px solid ${q.correct_opt === 'a' ? 'var(--success)' : 'var(--panel-border)'}; backdrop-filter: blur(12px);">A. ${q.opt_a}</div>
+            <div style="padding: 10px 12px; border-radius: 8px; background: ${q.correct_opt === 'b' ? 'var(--success-bg)' : 'rgba(255,255,255,0.25)'}; border: 1px solid ${q.correct_opt === 'b' ? 'var(--success)' : 'var(--panel-border)'}; backdrop-filter: blur(12px);">B. ${q.opt_b}</div>
+            <div style="padding: 10px 12px; border-radius: 8px; background: ${q.correct_opt === 'c' ? 'var(--success-bg)' : 'rgba(255,255,255,0.25)'}; border: 1px solid ${q.correct_opt === 'c' ? 'var(--success)' : 'var(--panel-border)'}; backdrop-filter: blur(12px);">C. ${q.opt_c}</div>
+            <div style="padding: 10px 12px; border-radius: 8px; background: ${q.correct_opt === 'd' ? 'var(--success-bg)' : 'rgba(255,255,255,0.25)'}; border: 1px solid ${q.correct_opt === 'd' ? 'var(--success)' : 'var(--panel-border)'}; backdrop-filter: blur(12px);">D. ${q.opt_d}</div>
           </div>
-          <p style="margin: 0; font-weight: bold; color: var(--success);">Correct Answer: ${q.correct_opt.toUpperCase()}</p>
         </div>
       `;
     }).join('');
@@ -1773,9 +1809,11 @@ function updateLiveSessionUI(status, isNewSession = false) {
     `;
     
     if (isNewSession) {
-      document.getElementById('students-list').innerHTML = '';
+      connectedStudents = []; // Reset connected students
+      document.getElementById('connected-students-list').innerHTML = ''; // Clear modal list
       document.getElementById('submissions-body').innerHTML = '';
       document.getElementById('student-count').textContent = '0';
+      document.getElementById('connected-students-count').textContent = '0';
       isQuizStarted = false; // Reset quiz started state for new session
       showAnswersToStudents = false; // Reset show answers state for new session
       showTeacherAnswers = false;
@@ -1791,8 +1829,8 @@ function updateLiveSessionUI(status, isNewSession = false) {
     exportBtn.disabled = true;
   } else if (status === 'stopped') {
     const showAnswersBtnClass = showAnswersToStudents ? 'btn-success' : 'btn-secondary';
-    const showAnswersBtnText = showAnswersToStudents ? 'Hide Answers from Students' : 'Show Answers to Students';
-    const viewAnswersBtnText = showTeacherAnswers ? 'Hide Questions and Answers' : 'View Questions and Answers';
+    const showAnswersBtnText = showAnswersToStudents ? 'Hide Answers' : 'Show Answers';
+    const viewAnswersBtnText = showTeacherAnswers ? 'Hide Q&A' : 'View Q&A';
     controls.innerHTML = `
       <div style="display: flex; gap: 16px; align-items: center;">
         <span style="color: var(--text-muted); font-weight: 600;">Session Completed</span>
@@ -1895,13 +1933,47 @@ document.getElementById('export-csv-btn').addEventListener('click', async () => 
 // Real-time Updates
 let studentCount = 0;
 function handleStudentJoined(data) {
-  const list = document.getElementById('students-list');
-  const li = document.createElement('li');
-  li.innerHTML = `<strong>${data.registrationNumber || 'N/A'}</strong> (${data.roll}) - ${data.name}${data.semester ? ` (${data.semester})` : ''}`;
-  list.appendChild(li);
+  // Check if student with same registration number is already in connectedStudents
+  const existingStudentIndex = connectedStudents.findIndex(
+    student => student.registrationNumber === data.registrationNumber
+  );
   
-  studentCount++;
+  if (existingStudentIndex === -1) {
+    // Not found, add new student
+    connectedStudents.push(data);
+  } else {
+    // Already exists, maybe update the data just in case
+    connectedStudents[existingStudentIndex] = data;
+  }
+  
+  // Sort connected students by Class Roll ascending
+  connectedStudents.sort((a, b) => {
+    // Convert rolls to numbers for proper numeric sorting, fallback to string comparison if not numeric
+    const rollA = isNaN(parseInt(a.roll)) ? a.roll : parseInt(a.roll);
+    const rollB = isNaN(parseInt(b.roll)) ? b.roll : parseInt(b.roll);
+    if (typeof rollA === 'number' && typeof rollB === 'number') {
+      return rollA - rollB;
+    }
+    return String(rollA).localeCompare(String(rollB));
+  });
+  
+  // Re-render the entire list when sorted
+  const list = document.getElementById('connected-students-list');
+  list.innerHTML = connectedStudents.map((student, index) => 
+    `<tr>
+      <td>${index + 1}</td>
+      <td>${student.registrationNumber || 'N/A'}</td>
+      <td>${student.roll}</td>
+      <td>${student.name}</td>
+      <td>${student.semester || 'N/A'}</td>
+      <td>${student.batch || 'N/A'}</td>
+    </tr>`
+  ).join('');
+   
+  // Set student count to length of unique connected students
+  studentCount = connectedStudents.length;
   document.getElementById('student-count').textContent = studentCount;
+  document.getElementById('connected-students-count').textContent = studentCount;
 }
 
 function updateAdminTimer(remainingSeconds) {
