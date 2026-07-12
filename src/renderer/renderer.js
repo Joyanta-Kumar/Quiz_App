@@ -1831,46 +1831,76 @@ async function loadDeletedItems() {
     return;
   }
   
-  container.innerHTML = deletedItems.map((item, index) => {
-    let title, subtitle, typeIcon;
+  // Group items by type
+  const groups = {
+    students: deletedItems.filter(item => item.type === 'student'),
+    quizzes: deletedItems.filter(item => item.type === 'quiz'),
+    sessions: deletedItems.filter(item => item.type === 'session')
+  };
+  
+  // Function to render a group
+  const renderGroup = (items, title) => {
+    if (items.length === 0) return '';
     
-    if (item.type === 'quiz') {
-      title = item.title;
-      subtitle = `Duration: ${Math.floor(item.duration / 60)} min${item.semester ? ` • ${item.semester}` : ''}${item.session ? ` • ${item.session}` : ''}`;
-      typeIcon = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>`;
-    } else { // student
-      title = item.full_name || item.name || 'Unknown';
-      subtitle = `${item.registration_number} • ${item.roll_number} • ${item.department} • ${item.batch}`;
-      typeIcon = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`;
-    }
-    
-    const isSelected = selectedRecycleItems.has(item.id);
-    
-    return `
-      <div class="quiz-card ${isSelectModeRecycle ? 'selectable' : ''} ${isSelected ? 'selected' : ''}" onclick="window.handleRecycleItemClick(${item.id}, '${item.type}', event)" style="position: relative;">
-        ${isSelectModeRecycle ? `
-          <div class="quiz-checkbox ${isSelected ? 'checked' : ''}">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="20 6 9 17 4 12"></polyline>
-            </svg>
-          </div>
-        ` : ''}
-        <div style="display: flex; align-items: center; gap: 12px;">
-          ${typeIcon}
-          <div style="flex: 1; min-width: 0;">
-            <h3 style="margin: 0 0 4px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${title}</h3>
-            <p style="margin: 0; color: var(--text-muted); font-size: 0.875rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${subtitle}</p>
-          </div>
-          ${!isSelectModeRecycle ? `
-            <div style="display: flex; gap: 8px;">
-              <button class="btn btn-primary" style="padding: 6px 12px;" onclick="event.stopPropagation(); window.restoreItem(${item.id}, '${item.type}')">Restore</button>
-              <button class="btn btn-danger" style="padding: 6px 12px;" onclick="event.stopPropagation(); window.permanentDeleteItem(${item.id}, '${item.type}')">Delete Permanently</button>
+    const itemsHtml = items.map(item => {
+      let itemTitle, subtitle, typeIcon;
+      
+      if (item.type === 'quiz') {
+        itemTitle = item.title;
+        subtitle = `Duration: ${Math.floor(item.duration / 60)} min${item.semester ? ` • ${item.semester}` : ''}${item.session ? ` • ${item.session}` : ''}`;
+        typeIcon = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>`;
+      } else if (item.type === 'session') {
+        itemTitle = item.title;
+        subtitle = `Code: ${item.code} • ${new Date(item.created_at).toLocaleString()}`;
+        typeIcon = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`;
+      } else { // student
+        itemTitle = item.full_name || item.name || 'Unknown';
+        subtitle = `${item.registration_number} • ${item.roll_number} • ${item.department} • ${item.batch}`;
+        typeIcon = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`;
+      }
+      
+      const isSelected = selectedRecycleItems.has(item.id);
+      
+      return `
+        <div class="quiz-card ${isSelectModeRecycle ? 'selectable' : ''} ${isSelected ? 'selected' : ''}" onclick="window.handleRecycleItemClick(${item.id}, '${item.type}', event)" style="position: relative;">
+          ${isSelectModeRecycle ? `
+            <div class="quiz-checkbox ${isSelected ? 'checked' : ''}">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
             </div>
           ` : ''}
+          <div style="display: flex; align-items: center; gap: 12px;">
+            ${typeIcon}
+            <div style="flex: 1; min-width: 0;">
+              <h3 style="margin: 0 0 4px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${itemTitle}</h3>
+              <p style="margin: 0; color: var(--text-muted); font-size: 0.875rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${subtitle}</p>
+            </div>
+            ${!isSelectModeRecycle ? `
+              <div style="display: flex; gap: 8px;">
+                <button class="btn btn-primary" style="padding: 6px 12px;" onclick="event.stopPropagation(); window.restoreItem(${item.id}, '${item.type}')">Restore</button>
+                <button class="btn btn-danger" style="padding: 6px 12px;" onclick="event.stopPropagation(); window.permanentDeleteItem(${item.id}, '${item.type}')">Delete Permanently</button>
+              </div>
+            ` : ''}
+          </div>
         </div>
+      `;
+    }).join('');
+    
+    return `
+      <div style="margin-bottom: 24px;">
+        <h2 style="margin: 0 0 12px 0; font-size: 1.25rem; color: var(--text-main);">${title}</h2>
+        ${itemsHtml}
       </div>
     `;
-  }).join('');
+  };
+  
+  // Render all groups
+  container.innerHTML = `
+    ${renderGroup(groups.quizzes, 'Quizzes')}
+    ${renderGroup(groups.students, 'Students')}
+    ${renderGroup(groups.sessions, 'History')}
+  `;
   
   updateRecycleSelectAllButton();
 }
@@ -1928,6 +1958,40 @@ window.openRecycleDetailsModal = async function(id, type) {
             </div>
           `).join('')}
         </div>
+      ` : ''}
+    `;
+  } else if (type === 'session') {
+    titleEl.textContent = item.title;
+    // Fetch submissions for the session
+    const submissions = await ipcRenderer.invoke('db:getSubmissionsBySession', id);
+    bodyEl.innerHTML = `
+      <div style="padding: 12px; background: var(--panel-bg); border-radius: 8px;">
+        <p style="margin: 0 0 8px 0;"><strong>Code:</strong> ${item.code}</p>
+        <p style="margin: 0 0 8px 0;"><strong>Created At:</strong> ${new Date(item.created_at).toLocaleString()}</p>
+        <p style="margin: 0;"><strong>Submissions:</strong> ${submissions.length}</p>
+      </div>
+      ${submissions.length > 0 ? `
+        <h3 style="margin: 16px 0 8px 0;">Submissions</h3>
+        <table style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="background: var(--panel-bg);">
+              <th style="padding: 8px; text-align: left; border-bottom: 1px solid var(--panel-border);">Reg. No</th>
+              <th style="padding: 8px; text-align: left; border-bottom: 1px solid var(--panel-border);">Roll</th>
+              <th style="padding: 8px; text-align: left; border-bottom: 1px solid var(--panel-border);">Name</th>
+              <th style="padding: 8px; text-align: left; border-bottom: 1px solid var(--panel-border);">Score</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${submissions.map(sub => `
+              <tr>
+                <td style="padding: 8px; border-bottom: 1px solid var(--panel-border);">${sub.registration_number || 'N/A'}</td>
+                <td style="padding: 8px; border-bottom: 1px solid var(--panel-border);">${sub.roll}</td>
+                <td style="padding: 8px; border-bottom: 1px solid var(--panel-border);">${sub.name}</td>
+                <td style="padding: 8px; border-bottom: 1px solid var(--panel-border);"><strong>${sub.score}</strong></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
       ` : ''}
     `;
   } else { // student
@@ -2014,6 +2078,8 @@ window.restoreItem = async function(id, type) {
   try {
     if (type === 'quiz') {
       await ipcRenderer.invoke('db:restoreQuiz', id);
+    } else if (type === 'session') {
+      await ipcRenderer.invoke('db:restoreSession', id);
     } else {
       await ipcRenderer.invoke('db:restoreStudent', id);
     }
@@ -2031,6 +2097,8 @@ window.permanentDeleteItem = async function(id, type) {
   try {
     if (type === 'quiz') {
       await ipcRenderer.invoke('db:permanentDeleteQuiz', id);
+    } else if (type === 'session') {
+      await ipcRenderer.invoke('db:permanentDeleteSession', id);
     } else {
       await ipcRenderer.invoke('db:permanentDeleteStudent', id);
     }
@@ -2048,9 +2116,13 @@ window.restoreSelectedItems = async function() {
   try {
     const quizIds = Array.from(selectedRecycleItems).filter(id => deletedItems.find(item => item.id === id && item.type === 'quiz')).map(Number);
     const studentIds = Array.from(selectedRecycleItems).filter(id => deletedItems.find(item => item.id === id && item.type === 'student')).map(Number);
+    const sessionIds = Array.from(selectedRecycleItems).filter(id => deletedItems.find(item => item.id === id && item.type === 'session')).map(Number);
     
     if (quizIds.length > 0) {
       await ipcRenderer.invoke('db:restoreQuizzes', quizIds);
+    }
+    if (sessionIds.length > 0) {
+      await ipcRenderer.invoke('db:restoreSessions', sessionIds);
     }
     
     for (const id of studentIds) {
@@ -2083,9 +2155,13 @@ window.permanentDeleteSelectedItems = async function() {
   try {
     const quizIds = Array.from(selectedRecycleItems).filter(id => deletedItems.find(item => item.id === id && item.type === 'quiz')).map(Number);
     const studentIds = Array.from(selectedRecycleItems).filter(id => deletedItems.find(item => item.id === id && item.type === 'student')).map(Number);
+    const sessionIds = Array.from(selectedRecycleItems).filter(id => deletedItems.find(item => item.id === id && item.type === 'session')).map(Number);
     
     if (quizIds.length > 0) {
       await ipcRenderer.invoke('db:permanentDeleteQuizzes', quizIds);
+    }
+    if (sessionIds.length > 0) {
+      await ipcRenderer.invoke('db:permanentDeleteSessions', sessionIds);
     }
     
     for (const id of studentIds) {

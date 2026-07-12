@@ -156,6 +156,22 @@ app.whenReady().then(async () => {
       return await dbApi.permanentDeleteStudent(id);
     });
 
+    ipcMain.handle('db:restoreSession', async (_, id) => {
+      return await dbApi.restoreSession(id);
+    });
+
+    ipcMain.handle('db:restoreSessions', async (_, sessionIds) => {
+      return await dbApi.restoreSessions(sessionIds);
+    });
+
+    ipcMain.handle('db:permanentDeleteSession', async (_, id) => {
+      return await dbApi.permanentDeleteSession(id);
+    });
+
+    ipcMain.handle('db:permanentDeleteSessions', async (_, sessionIds) => {
+      return await dbApi.permanentDeleteSessions(sessionIds);
+    });
+
     ipcMain.handle('db:getQuestionsByQuiz', async (_, quizId) => {
       return await dbApi.getQuestionsByQuiz(quizId);
     });

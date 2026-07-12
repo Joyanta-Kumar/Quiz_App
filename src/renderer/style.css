@@ -490,7 +490,7 @@ th {
 .quiz-card.history-item {
   padding: 24px;
   margin-bottom: 0;
-  border-left: none;
+  /* border-left: none; */
   transform: none;
 }
 

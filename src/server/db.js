@@ -220,6 +220,17 @@ async function initDb() {
           });
         }
 
+        // Add deleted column to sessions if not exists
+        const sessionDeletedExists = await columnExists('sessions', 'deleted');
+        if (!sessionDeletedExists) {
+          await new Promise((res, rej) => {
+            db.run(`ALTER TABLE sessions ADD COLUMN deleted INTEGER DEFAULT 0`, (err) => {
+              if (err) rej(err);
+              else res();
+            });
+          });
+        }
+
         // Submissions table
         await new Promise((res, rej) => {
           db.run(`CREATE TABLE IF NOT EXISTS submissions (
@@ -517,6 +528,13 @@ const dbApi = {
         : `SELECT id, registration_number, roll_number, full_name, semester, session_year, department, batch, verified, 'student' as type FROM students WHERE deleted = 1`;
       
       const quizzesQuery = `SELECT id, title, duration, semester, session, 'quiz' as type FROM quizzes WHERE deleted = 1`;
+
+      const sessionsQuery = `
+        SELECT s.id, s.code, q.title, s.created_at, 'session' as type 
+        FROM sessions s 
+        JOIN quizzes q ON s.quiz_id = q.id 
+        WHERE s.deleted = 1
+      `;
       
       const students = await new Promise((res, rej) => {
         db.all(studentsQuery, (err, rows) => {
@@ -531,8 +549,15 @@ const dbApi = {
           else res(rows);
         });
       });
+
+      const sessions = await new Promise((res, rej) => {
+        db.all(sessionsQuery, (err, rows) => {
+          if (err) rej(err);
+          else res(rows);
+        });
+      });
       
-      resolve([...students, ...quizzes]);
+      resolve([...students, ...quizzes, ...sessions]);
     });
   },
 
@@ -631,6 +656,7 @@ const dbApi = {
         (SELECT MAX(score) FROM submissions WHERE session_id = s.id) as highest_score
         FROM sessions s
         JOIN quizzes q ON s.quiz_id = q.id
+        WHERE s.deleted = 0
         ORDER BY s.created_at DESC
       `, (err, rows) => {
         if (err) reject(err);
@@ -640,6 +666,52 @@ const dbApi = {
   },
 
   deleteSession: (sessionId) => {
+    return new Promise((resolve, reject) => {
+      db.run(`UPDATE sessions SET deleted = 1 WHERE id = ?`, [sessionId], function(err) {
+        if (err) reject(err);
+        else resolve(this.changes);
+      });
+    });
+  },
+
+  deleteSessions: (sessionIds) => {
+    return new Promise((resolve, reject) => {
+      if (sessionIds.length === 0) {
+        resolve(0);
+        return;
+      }
+      const placeholders = sessionIds.map(() => '?').join(',');
+      db.run(`UPDATE sessions SET deleted = 1 WHERE id IN (${placeholders})`, sessionIds, function(err) {
+        if (err) reject(err);
+        else resolve(this.changes);
+      });
+    });
+  },
+
+  restoreSession: (sessionId) => {
+    return new Promise((resolve, reject) => {
+      db.run(`UPDATE sessions SET deleted = 0 WHERE id = ?`, [sessionId], function(err) {
+        if (err) reject(err);
+        else resolve(this.changes);
+      });
+    });
+  },
+
+  restoreSessions: (sessionIds) => {
+    return new Promise((resolve, reject) => {
+      if (sessionIds.length === 0) {
+        resolve(0);
+        return;
+      }
+      const placeholders = sessionIds.map(() => '?').join(',');
+      db.run(`UPDATE sessions SET deleted = 0 WHERE id IN (${placeholders})`, sessionIds, function(err) {
+        if (err) reject(err);
+        else resolve(this.changes);
+      });
+    });
+  },
+
+  permanentDeleteSession: (sessionId) => {
     return new Promise((resolve, reject) => {
       db.serialize(() => {
         // First delete all submissions for this session
@@ -655,7 +727,7 @@ const dbApi = {
     });
   },
 
-  deleteSessions: (sessionIds) => {
+  permanentDeleteSessions: (sessionIds) => {
     return new Promise((resolve, reject) => {
       if (sessionIds.length === 0) {
         resolve(0);
