@@ -1382,7 +1382,7 @@ function addEditQuestionUI() {
         imagePreview.style.display = 'block';
         imagePreview.innerHTML = `
           <div style="display: flex; align-items: flex-start; gap: 8px;">
-            <div class="resizable-image-container">
+            <div class="resizable-image-container" style="width: 200px; height: 150px;">
               <img src="${event.target.result}">
             </div>
             <button type="button" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" onclick="window.removeEditQuestionImage('${qid}')">
@@ -1481,7 +1481,7 @@ window.openViewQuestionsModal = async function(quizId, title, isReadOnly = false
           ${q.image ? `
             <div class="eq-image-preview" style="margin-bottom: 12px;">
               <div style="display: flex; align-items: flex-start; gap: 8px;">
-                <div class="resizable-image-container">
+                <div class="resizable-image-container" style="width: 200px; height: 150px;">
                   <img src="${q.image}">
                 </div>
                 ${!isReadOnly ? `
@@ -1553,7 +1553,7 @@ window.openViewQuestionsModal = async function(quizId, title, isReadOnly = false
               imagePreview.style.display = 'block';
               imagePreview.innerHTML = `
                 <div style="display: flex; align-items: flex-start; gap: 8px;">
-                  <div class="resizable-image-container">
+                  <div class="resizable-image-container" style="width: 200px; height: 150px;">
                     <img src="${event.target.result}">
                   </div>
                   <button type="button" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" onclick="window.removeEditQuestionImage('${qid}')">
@@ -1785,7 +1785,7 @@ function addQuestionUI() {
         const base64 = event.target.result;
         imagePreview.innerHTML = `
           <div style="display: flex; align-items: flex-start; gap: 8px;">
-            <div class="resizable-image-container"">
+            <div class="resizable-image-container" style="width: 200px; height: 150px;">
               <img src="${base64}">
             </div>
             <button type="button" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" onclick="this.closest('.q-image-preview').innerHTML = ''; this.closest('.question-item').querySelector('.q-image-input').value = '';">
@@ -1963,11 +1963,24 @@ window.openStartSessionModal = async function(quizId, title) {
   currentQuizId = quizId;
   document.getElementById('modal-quiz-title').textContent = `Starting: ${title}`;
   
-  // Fetch unique student groups and populate dropdown
-  const groups = await ipcRenderer.invoke('db:getUniqueStudentGroups');
+  // Fetch unique values and populate dropdowns
+  const [departments, sessionYears, semesters, batches] = await Promise.all([
+    ipcRenderer.invoke('db:getUniqueDepartments'),
+    ipcRenderer.invoke('db:getUniqueSessionYears'),
+    ipcRenderer.invoke('db:getUniqueSemesters'),
+    ipcRenderer.invoke('db:getUniqueBatches')
+  ]);
   
-  const groupSelect = document.getElementById('filter-group');
-  groupSelect.innerHTML = '<option value="">Select Student Group</option>' + groups.map(g => `<option value="${escapeAttr(JSON.stringify(g))}">Dept: ${g.department}, Session: ${g.session_year}, Semester: ${g.semester}, Batch: ${g.batch}</option>`).join('');
+  // Populate each dropdown
+  const deptSelect = document.getElementById('filter-department');
+  const sessionSelect = document.getElementById('filter-session-year');
+  const semSelect = document.getElementById('filter-semester');
+  const batchSelect = document.getElementById('filter-batch');
+  
+  deptSelect.innerHTML = '<option value="">Select Department</option>' + departments.map(d => `<option value="${d}">${d}</option>`).join('');
+  sessionSelect.innerHTML = '<option value="">Select Session Year</option>' + sessionYears.map(s => `<option value="${s}">${s}</option>`).join('');
+  semSelect.innerHTML = '<option value="">Select Semester</option>' + semesters.map(s => `<option value="${s}">${s}</option>`).join('');
+  batchSelect.innerHTML = '<option value="">Select Batch</option>' + batches.map(b => `<option value="${b}">${b}</option>`).join('');
   
   document.getElementById('start-session-modal').classList.add('active');
 }
@@ -2007,19 +2020,10 @@ window.closeModal = function() {
 }
 
 document.getElementById('confirm-start-btn').addEventListener('click', () => {
-  const groupSelect = document.getElementById('filter-group');
-  let filterDepartment = null;
-  let filterSessionYear = null;
-  let filterSemester = null;
-  let filterBatch = null;
-  
-  if (groupSelect.value) {
-    const group = JSON.parse(groupSelect.value);
-    filterDepartment = group.department;
-    filterSessionYear = group.session_year;
-    filterSemester = group.semester;
-    filterBatch = group.batch;
-  }
+  const filterDepartment = document.getElementById('filter-department').value || null;
+  const filterSessionYear = document.getElementById('filter-session-year').value || null;
+  const filterSemester = document.getElementById('filter-semester').value || null;
+  const filterBatch = document.getElementById('filter-batch').value || null;
   
   ws.send(JSON.stringify({
     type: 'session:start',

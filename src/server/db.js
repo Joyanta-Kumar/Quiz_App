@@ -896,6 +896,24 @@ const dbApi = {
         else resolve(rows.map(r => r.batch));
       });
     });
+  },
+
+  getUniqueStudentGroups: () => {
+    return new Promise((resolve, reject) => {
+      db.all(`
+        SELECT DISTINCT department, session_year, semester, batch 
+        FROM students 
+        WHERE deleted = 0 
+          AND department IS NOT NULL 
+          AND session_year IS NOT NULL 
+          AND semester IS NOT NULL 
+          AND batch IS NOT NULL
+        ORDER BY department, session_year, semester, batch
+      `, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    });
   }
 };
 

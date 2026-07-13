@@ -212,6 +212,10 @@ app.whenReady().then(async () => {
       return await dbApi.getUniqueBatches();
     });
 
+    ipcMain.handle('db:getUniqueStudentGroups', async () => {
+      return await dbApi.getUniqueStudentGroups();
+    });
+
     ipcMain.handle('db:createSession', async (_, code, quizId, filterDepartment, filterSessionYear, filterSemester, filterBatch) => {
       return await dbApi.createSession(code, quizId, filterDepartment, filterSessionYear, filterSemester, filterBatch);
     });
