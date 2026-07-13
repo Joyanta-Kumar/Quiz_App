@@ -329,13 +329,13 @@
     <div class="modal-content glass-panel view-results-modal">
       <div class="modal-header-row">
         <h2 id="view-questions-title"></h2>
+          <div class="modal-actions">
+          <button class="btn btn-primary" onclick="saveQuestionEdits()">Save Changes</button>
+          <button class="btn btn-secondary" onclick="closeViewQuestionsModal()">Close</button>
+        </div>
       </div>
       <div id="view-questions-body">
         <!-- Questions populated via JS -->
-      </div>
-      <div class="modal-actions">
-        <button class="btn btn-primary" onclick="saveQuestionEdits()">Save Changes</button>
-        <button class="btn btn-secondary" onclick="closeViewQuestionsModal()">Close</button>
       </div>
     </div>
   </div>

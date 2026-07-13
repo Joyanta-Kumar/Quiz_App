@@ -1382,7 +1382,7 @@ function addEditQuestionUI() {
         imagePreview.style.display = 'block';
         imagePreview.innerHTML = `
           <div style="display: flex; align-items: flex-start; gap: 8px;">
-            <div class="resizable-image-container" style="width: 200px; height: 150px;">
+            <div class="resizable-image-container">
               <img src="${event.target.result}">
             </div>
             <button type="button" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" onclick="window.removeEditQuestionImage('${qid}')">
@@ -1481,7 +1481,7 @@ window.openViewQuestionsModal = async function(quizId, title, isReadOnly = false
           ${q.image ? `
             <div class="eq-image-preview" style="margin-bottom: 12px;">
               <div style="display: flex; align-items: flex-start; gap: 8px;">
-                <div class="resizable-image-container" style="width: 200px; height: 150px;">
+                <div class="resizable-image-container">
                   <img src="${q.image}">
                 </div>
                 ${!isReadOnly ? `
@@ -1553,7 +1553,7 @@ window.openViewQuestionsModal = async function(quizId, title, isReadOnly = false
               imagePreview.style.display = 'block';
               imagePreview.innerHTML = `
                 <div style="display: flex; align-items: flex-start; gap: 8px;">
-                  <div class="resizable-image-container" style="width: 200px; height: 150px;">
+                  <div class="resizable-image-container">
                     <img src="${event.target.result}">
                   </div>
                   <button type="button" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" onclick="window.removeEditQuestionImage('${qid}')">
@@ -1785,7 +1785,7 @@ function addQuestionUI() {
         const base64 = event.target.result;
         imagePreview.innerHTML = `
           <div style="display: flex; align-items: flex-start; gap: 8px;">
-            <div class="resizable-image-container" style="width: 200px; height: 150px;">
+            <div class="resizable-image-container"">
               <img src="${base64}">
             </div>
             <button type="button" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" onclick="this.closest('.q-image-preview').innerHTML = ''; this.closest('.question-item').querySelector('.q-image-input').value = '';">
