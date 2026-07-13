@@ -1381,16 +1381,8 @@ function addEditQuestionUI() {
         editQuestionImages[qid] = event.target.result;
         imagePreview.style.display = 'block';
         imagePreview.innerHTML = `
-          <div style="display: flex; align-items: flex-start; gap: 8px;">
-            <div class="resizable-image-container">
-              <img src="${event.target.result}">
-            </div>
-            <button type="button" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" onclick="window.removeEditQuestionImage('${qid}')">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
+          <div class="resizable-image-container">
+            <img src="${event.target.result}">
           </div>
         `;
         const btnRow = imageInput.parentElement;
@@ -1452,7 +1444,7 @@ window.openViewQuestionsModal = async function(quizId, title, isReadOnly = false
   
   const optionLetters = ['a', 'b', 'c', 'd'];
   
-  body.innerHTML = addButtonHtml + questions.map((q, i) => {
+  body.innerHTML = questions.map((q, i) => {
     const optValues = { a: q.opt_a, b: q.opt_b, c: q.opt_c, d: q.opt_d };
     
     const optionsHtml = optionLetters.map(opt => `
@@ -1479,20 +1471,8 @@ window.openViewQuestionsModal = async function(quizId, title, isReadOnly = false
             ` : ''}
           </div>
           ${q.image ? `
-            <div class="eq-image-preview" style="margin-bottom: 12px;">
-              <div style="display: flex; align-items: flex-start; gap: 8px;">
-                <div class="resizable-image-container">
-                  <img src="${q.image}">
-                </div>
-                ${!isReadOnly ? `
-                  <button type="button" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" onclick="window.removeEditQuestionImage(${q.id})">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;">
-                      <line x1="18" y1="6" x2="6" y2="18"></line>
-                      <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                  </button>
-                ` : ''}
-              </div>
+            <div class="resizable-image-container">
+              <img src="${q.image}">
             </div>
           ` : ''}
           ${isReadOnly ? `
@@ -1519,7 +1499,7 @@ window.openViewQuestionsModal = async function(quizId, title, isReadOnly = false
         </div>
       </div>
     `;
-  }).join('');
+  }).join('') + addButtonHtml;
   
   // If no questions and not read-only, still show add button
   if (questions.length === 0 && !isReadOnly) {
@@ -1552,16 +1532,8 @@ window.openViewQuestionsModal = async function(quizId, title, isReadOnly = false
               }
               imagePreview.style.display = 'block';
               imagePreview.innerHTML = `
-                <div style="display: flex; align-items: flex-start; gap: 8px;">
-                  <div class="resizable-image-container">
-                    <img src="${event.target.result}">
-                  </div>
-                  <button type="button" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" onclick="window.removeEditQuestionImage('${qid}')">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;">
-                      <line x1="18" y1="6" x2="6" y2="18"></line>
-                      <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                  </button>
+                <div class="resizable-image-container">
+                  <img src="${event.target.result}">
                 </div>
               `;
               const btnRow = imageInput.parentElement;
@@ -1784,16 +1756,8 @@ function addQuestionUI() {
       reader.onload = (event) => {
         const base64 = event.target.result;
         imagePreview.innerHTML = `
-          <div style="display: flex; align-items: flex-start; gap: 8px;">
-            <div class="resizable-image-container"">
-              <img src="${base64}">
-            </div>
-            <button type="button" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" onclick="this.closest('.q-image-preview').innerHTML = ''; this.closest('.question-item').querySelector('.q-image-input').value = '';">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
+          <div class="resizable-image-container"">
+            <img src="${base64}">
           </div>
         `;
         // Store base64 in a data attribute for easy access

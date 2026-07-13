@@ -637,36 +637,19 @@ th {
 
 /* Resizable image container */
 .resizable-image-container {
-  /* display: inline-flex; */
-  position: relative;
-  align-items: flex-start;
   resize: vertical;
   overflow: hidden;
-  max-height: 400px;
-  height: 40px;
-  min-height: 40px;
-  width: 100%;
-  border-radius: 8px;
-}
-
-.resizable-image-container::after {
-  content: 'Vertically resizable';
-  /* content: 'Vertically resizable ↓◤◢⌟'; */
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  background: rgba(255, 255, 255, 0.5);
-  color: var(--text-main);
-  padding: 4px 6px;
-  backdrop-filter: blur(4px);
-  border-top-left-radius: 6px;
-  font-size: 0.75rem;
+  max-width: 100%;
+  max-height: 500px;
+  height: 460px;
+  min-height: 200px;
 }
 
 .resizable-image-container img {
-  width: 100%;
+  border-radius: 8px;
+  object-fit: fill;
+  width: auto;
+  max-width: 100%;
   height: 100%;
-  object-fit: cover;
-  border-radius: 4px;
 }
 
