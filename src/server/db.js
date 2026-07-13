@@ -311,22 +311,58 @@ async function initDb() {
 const dbApi = {
   // Students
   createStudent: async (registrationNumber, rollNumber, fullName, semester, sessionYear, department, batch) => {
-    return new Promise(async (resolve, reject) => {
-      const hasNameColumn = await columnExists('students', 'name');
-      
-      let query, params;
-      if (hasNameColumn) {
-        // If old name column exists, include it in insert to avoid NOT NULL errors
-        query = `INSERT INTO students (registration_number, roll_number, full_name, name, semester, session_year, department, batch, verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`;
-        params = [registrationNumber, rollNumber, fullName, fullName, semester, sessionYear, department, batch];
-      } else {
-        query = `INSERT INTO students (registration_number, roll_number, full_name, semester, session_year, department, batch, verified) VALUES (?, ?, ?, ?, ?, ?, ?, 1)`;
-        params = [registrationNumber, rollNumber, fullName, semester, sessionYear, department, batch];
+    const normalizedRegNo = normalizeRegNo(registrationNumber);
+
+    // Check if an ACTIVE student with this normalized registration number already exists
+    const existingStudent = await new Promise((res, rej) => {
+      const checkQuery = `SELECT id, deleted FROM students WHERE REPLACE(REPLACE(LOWER(registration_number), '-', ''), ' ', '') = ?`;
+      db.get(checkQuery, [normalizedRegNo], (err, row) => {
+        if (err) rej(err);
+        else res(row);
+      });
+    });
+
+    const hasNameColumn = await columnExists('students', 'name');
+
+    if (existingStudent) {
+      if (existingStudent.deleted) {
+        // A previously removed (soft-deleted) student exists - restore it instead of erroring
+        if (hasNameColumn) {
+          await new Promise((resolve, reject) => {
+            db.run(
+              `UPDATE students SET roll_number = ?, full_name = ?, name = ?, semester = ?, session_year = ?, department = ?, batch = ?, deleted = 0, verified = 1 WHERE id = ?`,
+              [rollNumber, fullName, fullName, semester, sessionYear, department, batch, existingStudent.id],
+              (err) => err ? reject(err) : resolve()
+            );
+          });
+        } else {
+          await new Promise((resolve, reject) => {
+            db.run(
+              `UPDATE students SET roll_number = ?, full_name = ?, semester = ?, session_year = ?, department = ?, batch = ?, deleted = 0, verified = 1 WHERE id = ?`,
+              [rollNumber, fullName, semester, sessionYear, department, batch, existingStudent.id],
+              (err) => err ? reject(err) : resolve()
+            );
+          });
+        }
+        return { inserted: 1, skipped: 0 };
       }
-      
+      return { inserted: 0, skipped: 1 };
+    }
+
+    let query, params;
+    if (hasNameColumn) {
+      // If old name column exists, include it in insert to avoid NOT NULL errors
+      query = `INSERT INTO students (registration_number, roll_number, full_name, name, semester, session_year, department, batch, verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`;
+      params = [registrationNumber, rollNumber, fullName, fullName, semester, sessionYear, department, batch];
+    } else {
+      query = `INSERT INTO students (registration_number, roll_number, full_name, semester, session_year, department, batch, verified) VALUES (?, ?, ?, ?, ?, ?, ?, 1)`;
+      params = [registrationNumber, rollNumber, fullName, semester, sessionYear, department, batch];
+    }
+
+    return new Promise((resolve, reject) => {
       db.run(query, params, function(err) {
         if (err) reject(err);
-        else resolve(this.lastID);
+        else resolve({ inserted: this.changes, skipped: 0 });
       });
     });
   },
@@ -344,9 +380,7 @@ const dbApi = {
         
         // First check if a student with this normalized reg no already exists
         const existingStudent = await new Promise((res, rej) => {
-          const checkQuery = hasNameColumn 
-            ? `SELECT id FROM students WHERE REPLACE(REPLACE(LOWER(registration_number), '-', ''), ' ', '') = ?`
-            : `SELECT id FROM students WHERE REPLACE(REPLACE(LOWER(registration_number), '-', ''), ' ', '') = ?`;
+          const checkQuery = `SELECT id, deleted FROM students WHERE REPLACE(REPLACE(LOWER(registration_number), '-', ''), ' ', '') = ?`;
           db.get(checkQuery, [normalizedRegNo], (err, row) => {
             if (err) rej(err);
             else res(row);
@@ -354,8 +388,30 @@ const dbApi = {
         });
         
         if (existingStudent) {
-          skippedCount++;
-          skippedStudents.push(student);
+          if (existingStudent.deleted) {
+            // Restore a previously removed student rather than skipping
+            if (hasNameColumn) {
+              await new Promise((resolve, reject) => {
+                db.run(
+                  `UPDATE students SET roll_number = ?, full_name = ?, name = ?, semester = ?, session_year = ?, department = ?, batch = ?, deleted = 0, verified = 1 WHERE id = ?`,
+                  [student.roll_number, student.full_name, student.full_name, student.semester, student.session_year, student.department, student.batch, existingStudent.id],
+                  (err) => err ? reject(err) : resolve()
+                );
+              });
+            } else {
+              await new Promise((resolve, reject) => {
+                db.run(
+                  `UPDATE students SET roll_number = ?, full_name = ?, semester = ?, session_year = ?, department = ?, batch = ?, deleted = 0, verified = 1 WHERE id = ?`,
+                  [student.roll_number, student.full_name, student.semester, student.session_year, student.department, student.batch, existingStudent.id],
+                  (err) => err ? reject(err) : resolve()
+                );
+              });
+            }
+            insertedCount++;
+          } else {
+            skippedCount++;
+            skippedStudents.push(student);
+          }
           continue;
         }
         

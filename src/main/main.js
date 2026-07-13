@@ -128,6 +128,10 @@ app.whenReady().then(async () => {
       return await dbApi.createStudents(students);
     });
 
+    ipcMain.handle('db:createStudent', async (_, registrationNumber, rollNumber, fullName, semester, sessionYear, department, batch) => {
+      return await dbApi.createStudent(registrationNumber, rollNumber, fullName, semester, sessionYear, department, batch);
+    });
+
     ipcMain.handle('db:deleteStudent', async (_, id) => {
       return await dbApi.softDeleteStudent(id);
     });

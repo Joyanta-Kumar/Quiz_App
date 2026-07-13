@@ -247,6 +247,51 @@ window.switchView = function(viewId) {
 
 let allStudents = [];
 
+// Custom in-page dialogs.
+// Native alert()/confirm() can steal focus from the BrowserWindow in Electron,
+// leaving the window unresponsive (clicks/keystrokes ignored) afterwards.
+// These custom modals avoid that problem.
+function escapeHtml(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function openDialog({ title = '', message = '', okText = 'OK', cancelText = null } = {}) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal';
+    overlay.style.zIndex = '2000';
+    overlay.innerHTML = `
+      <div class="modal-content glass-panel">
+        ${title ? `<h2>${escapeHtml(title)}</h2>` : ''}
+        <p style="margin: 8px 0 20px; line-height: 1.5;">${escapeHtml(message)}</p>
+        <div class="modal-actions" style="justify-content: flex-end;">
+          ${cancelText ? `<button type="button" class="btn btn-secondary" data-act="cancel">${escapeHtml(cancelText)}</button>` : ''}
+          <button type="button" class="btn btn-primary" data-act="ok">${escapeHtml(okText)}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('active'));
+
+    const close = (value) => {
+      overlay.classList.remove('active');
+      setTimeout(() => overlay.remove(), 150);
+      resolve(value);
+    };
+
+    overlay.querySelector('[data-act="ok"]').addEventListener('click', () => close(cancelText ? true : undefined));
+    const cancelBtn = overlay.querySelector('[data-act="cancel"]');
+    if (cancelBtn) cancelBtn.addEventListener('click', () => close(false));
+  });
+}
+
+window.showAlert = (message) => openDialog({ message, okText: 'OK' });
+window.showConfirm = (message) => openDialog({ message, okText: 'Yes', cancelText: 'Cancel' });
+
 async function loadStudents() {
   const container = document.getElementById('students-container');
   
@@ -733,7 +778,7 @@ window.viewBatchStudents = function(key) {
               <td>${sanitize(student.full_name || 'N/A')}</td>
               <td>${sanitize(student.semester || 'N/A')}</td>
               <td>
-                <button class="btn btn-danger" onclick="window.deleteStudent(${student.id})" style="padding: 4px 8px;">
+                <button class="btn btn-danger" onclick="window.deleteStudent(${student.id}, '${key}')" style="padding: 4px 8px;">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="3 6 5 6 21 6"></polyline>
                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -799,29 +844,30 @@ window.viewBatchStudents = function(key) {
     try {
       const result = await ipcRenderer.invoke('db:createStudent', regNo, rollNo, name, semester, group.session, group.dept, group.batch);
       if (result.inserted) {
-        alert('Student added successfully!');
+        await window.showAlert('Student added successfully!');
         modal.classList.remove('active');
         await loadStudents();
         window.viewBatchStudents(key);
       } else if (result.skipped) {
-        alert('Student with this registration number already exists!');
+        await window.showAlert('Student with this registration number already exists!');
       }
     } catch (err) {
       console.error('Failed to add student:', err);
-      alert('Failed to add student: ' + (err.message || 'Unknown error'));
+      await window.showAlert('Failed to add student: ' + (err.message || 'Unknown error'));
     }
   });
 };
 
-window.deleteStudent = async function(id) {
-  if (confirm('Are you sure you want to delete this student?')) {
+window.deleteStudent = async function(id, groupKey) {
+  if (await window.showConfirm('Are you sure you want to delete this student?')) {
     await ipcRenderer.invoke('db:deleteStudent', id);
-    loadStudents();
+    await loadStudents();
+    if (groupKey) window.viewBatchStudents(groupKey);
   }
 };
 
 window.deleteStudentsByGroup = async function(dept, batch, sessionYear) {
-  if (confirm(`Are you sure you want to delete all students in ${dept} - Batch ${batch} (Session ${sessionYear})?`)) {
+  if (await window.showConfirm(`Are you sure you want to delete all students in ${dept} - Batch ${batch} (Session ${sessionYear})?`)) {
     await ipcRenderer.invoke('db:deleteStudentsByGroup', dept, batch, sessionYear);
     loadStudents();
   }
