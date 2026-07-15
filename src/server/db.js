@@ -193,28 +193,6 @@ async function initDb() {
           });
         }
 
-        // Add image_width column to questions if not exists
-        const questionImageWidthExists = await columnExists('questions', 'image_width');
-        if (!questionImageWidthExists) {
-          await new Promise((res, rej) => {
-            db.run(`ALTER TABLE questions ADD COLUMN image_width INTEGER`, (err) => {
-              if (err) rej(err);
-              else res();
-            });
-          });
-        }
-
-        // Add image_height column to questions if not exists
-        const questionImageHeightExists = await columnExists('questions', 'image_height');
-        if (!questionImageHeightExists) {
-          await new Promise((res, rej) => {
-            db.run(`ALTER TABLE questions ADD COLUMN image_height INTEGER`, (err) => {
-              if (err) rej(err);
-              else res();
-            });
-          });
-        }
-
         // Sessions table
         await new Promise((res, rej) => {
           db.run(`CREATE TABLE IF NOT EXISTS sessions (
@@ -662,21 +640,21 @@ const dbApi = {
     });
   },
 
-  addQuestion: (quizId, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image, imageWidth, imageHeight) => {
+  addQuestion: (quizId, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image) => {
     return new Promise((resolve, reject) => {
-      db.run(`INSERT INTO questions (quiz_id, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image, image_width, image_height) 
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, 
-              [quizId, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image, imageWidth, imageHeight], function(err) {
+      db.run(`INSERT INTO questions (quiz_id, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image) 
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, 
+              [quizId, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image], function(err) {
         if (err) reject(err);
         else resolve(this.lastID);
       });
     });
   },
 
-  updateQuestion: (id, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image, imageWidth, imageHeight) => {
+  updateQuestion: (id, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image) => {
     return new Promise((resolve, reject) => {
-      db.run(`UPDATE questions SET text = ?, opt_a = ?, opt_b = ?, opt_c = ?, opt_d = ?, correct_opt = ?, image = ?, image_width = ?, image_height = ? WHERE id = ?`,
-        [text, opt_a, opt_b, opt_c, opt_d, correct_opt, image, imageWidth, imageHeight, id], function(err) {
+      db.run(`UPDATE questions SET text = ?, opt_a = ?, opt_b = ?, opt_c = ?, opt_d = ?, correct_opt = ?, image = ? WHERE id = ?`,
+        [text, opt_a, opt_b, opt_c, opt_d, correct_opt, image, id], function(err) {
           if (err) reject(err);
           else resolve(this.changes);
         });

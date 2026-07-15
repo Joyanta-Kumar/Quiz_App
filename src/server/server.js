@@ -145,9 +145,7 @@ async function startServer(port = 3000) {
         opt_b: q.opt_b,
         opt_c: q.opt_c,
         opt_d: q.opt_d,
-        image: q.image,
-        image_width: q.image_width,
-        image_height: q.image_height
+        image: q.image
       }));
       
       res.json({

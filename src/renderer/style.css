@@ -329,11 +329,6 @@ input[type="text"]:focus, input[type="number"]:focus {
   border-radius: 12px;
   margin-bottom: 20px;
   transition: all 0.28s cubic-bezier(0.22, 1, 0.36, 1);
-  overflow-x: hidden; /* Prevent horizontal overflow */
-}
-
-.question-item .form-group {
-  overflow-x: hidden; /* Also prevent overflow here */
 }
 
 .question-item:hover {
@@ -654,71 +649,21 @@ th {
 
 /* No need for custom button styles here; we'll use existing .btn and .btn-secondary classes! */
 
-/* Image Preview Containers */
-.q-image-preview,
-.eq-image-preview {
-  max-width: 100%;
-  width: 100%;
-}
-
 /* Resizable image container */
 .resizable-image-container {
-  resize: both;
+  resize: vertical;
   overflow: hidden;
-  max-width: 100% !important;
+  max-width: 100%;
   max-height: 500px;
   height: 460px;
-  min-height: 150px;
-  min-width: 200px;
-  position: relative;
-  border-radius: 8px;
-  box-sizing: border-box;
-}
-
-/* Resize indicator (bottom-right corner) */
-.resizable-image-container::after {
-  content: '';
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 20px;
-  height: 20px;
-  background: 
-    linear-gradient(135deg, transparent 50%, rgba(114,135,253,0.5) 50%);
-  cursor: se-resize;
+  min-height: 200px;
 }
 
 .resizable-image-container img {
   border-radius: 8px;
-  object-fit: contain;
-  width: 100%;
+  object-fit: fill;
+  width: auto;
+  max-width: 100%;
   height: 100%;
-}
-
-/* Delete button (cross in top-right) */
-.delete-image-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: none;
-  background: var(--danger);
-  color: white;
-  font-size: 20px;
-  font-weight: bold;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-  transition: all 0.2s;
-}
-
-.delete-image-btn:hover {
-  background: #e05266;
-  transform: scale(1.1);
 }
 

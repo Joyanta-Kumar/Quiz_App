@@ -329,15 +329,6 @@ select {
   line-height: 1.5;
 }
 
-/* Question image styling */
-.q-image {
-  max-width: 100%;
-  border-radius: 12px;
-  margin-bottom: 24px;
-  display: block;
-  object-fit: contain;
-}
-
 .options-list {
   display: flex;
   flex-direction: column;

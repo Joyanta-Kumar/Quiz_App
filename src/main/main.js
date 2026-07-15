@@ -88,12 +88,12 @@ app.whenReady().then(async () => {
       return await dbApi.softDeleteQuiz(id);
     });
 
-    ipcMain.handle('db:addQuestion', async (_, quizId, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image, imageWidth, imageHeight) => {
-      return await dbApi.addQuestion(quizId, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image, imageWidth, imageHeight);
+    ipcMain.handle('db:addQuestion', async (_, quizId, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image) => {
+      return await dbApi.addQuestion(quizId, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image);
     });
 
-    ipcMain.handle('db:updateQuestion', async (_, id, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image, imageWidth, imageHeight) => {
-    return await dbApi.updateQuestion(id, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image, imageWidth, imageHeight);
+    ipcMain.handle('db:updateQuestion', async (_, id, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image) => {
+    return await dbApi.updateQuestion(id, text, opt_a, opt_b, opt_c, opt_d, correct_opt, image);
   });
   
   ipcMain.handle('db:deleteQuestion', async (_, id) => {
