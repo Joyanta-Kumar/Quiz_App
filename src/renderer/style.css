@@ -230,7 +230,7 @@ h1 {
 
 /* Forms */
 .form-group {
-  margin-bottom: 24px;
+  margin-top: 24px;
 }
 
 .form-group label {
@@ -502,6 +502,15 @@ th {
   padding-right: 8px;
 }
 
+
+.questions-builder {
+  margin-top: 24px;
+}
+
+#questions-container {
+  margin-top: 12px;
+}
+
 /* Editable questions in the View Questions modal */
 .edit-question-item {
   background: rgba(255, 255, 255, 0.34);
@@ -526,7 +535,11 @@ th {
 
 .edit-question-item .eq-text {
   font-weight: 600;
-  margin-bottom: 12px;
+  margin-top: 8px;
+}
+
+.edit-question-item .eq-text:focus {
+  outline-color: var(--primary);
 }
 
 .edit-question-item .eq-image-preview img {
@@ -574,6 +587,7 @@ th {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
+  margin-top: 24px;
 }
 
 /* History Expandable */

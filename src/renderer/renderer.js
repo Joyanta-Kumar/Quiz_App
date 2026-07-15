@@ -1554,7 +1554,7 @@ window.openViewQuestionsModal = async function(quizId, title, isReadOnly = false
           ${isReadOnly ? `
             <div style="word-wrap: break-word; overflow-wrap: break-word; padding: 8px 0; color: var(--text-primary); font-weight: 500;">${escapeAttr(q.text)}</div>
           ` : `
-            <textarea class="eq-text" placeholder="Question text" autocomplete="off" style="width: 100%; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--panel-border); background: rgba(255,255,255,0.4); font-family: inherit; font-size: inherit; resize: vertical; min-height: 60px;">${escapeAttr(q.text)}</textarea>
+            <textarea class="eq-text edit" placeholder="Question text" autocomplete="off" style="width: 100%; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--panel-border); background: rgba(255,255,255,0.4); font-family: inherit; font-weight: normal; font-size: inherit; resize: vertical; min-height: 60px;">${escapeAttr(q.text)}</textarea>
           `}
         </div>
         ${isReadOnly ? '' : `
